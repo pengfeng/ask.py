@@ -20,6 +20,7 @@ Of course this flow is a very simplified version of the real AI search engines, 
 starting point to understand the basic concepts.
 
 One benefit of this simple program is that you can manipulate the search function and output format.
+
 For example:
 
 - You can specify date-restrict to only retrieve the latest information
@@ -27,7 +28,7 @@ For example:
 
 ## Quick start
 
-```Python
+```bash
 
 # the tensorflow library takes a while to install if running for the first time
 pip install -r requirements.txt
@@ -131,6 +132,9 @@ AI experience.
 ```
 
 ### Only use the latest information from a specific site
+
+This following query will only use the information from openai.com that are updated in the last day.
+The behavior is similar to the "site:openai.com" and "date-restrict" search parameters in Google search.
 
 ```
 % python ask.py -q "OpenAI Swarm Framework" -d 1 -s openai.com
