@@ -2,7 +2,7 @@ import json
 import logging
 import os
 import urllib.parse
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import click
 import requests
@@ -13,11 +13,14 @@ from openai import OpenAI
 
 class Ask:
 
-    def __init__(self):
+    def __init__(self, logger: Optional[logging.Logger] = None):
         self.read_env_variables()
-        self.logger = logging.getLogger(__name__)
-        self.logger.setLevel(logging.INFO)
-        self.logger.addHandler(logging.StreamHandler())
+        if logger is not None:
+            self.logger = logger
+        else:
+            self.logger = logging.getLogger(__name__)
+            self.logger.setLevel(logging.INFO)
+            self.logger.addHandler(logging.StreamHandler())
 
         from vectordb import Memory
 
@@ -52,7 +55,7 @@ class Ask:
         url_paras = f"&safe=active"
         url = f"{url_base}{url_paras}"
 
-        self.logger.info(f"Searching for query: {query}")
+        self.logger.debug(f"Searching for query: {query}")
 
         resp = requests.get(url)
 
@@ -72,12 +75,12 @@ class Ask:
 
         total_results = search_results_dict["searchInformation"].get("totalResults", 0)
         if total_results == 0:
-            self.logger.info(f"No results found for query: {query}")
+            self.logger.warning(f"No results found for query: {query}")
             return []
 
         results = search_results_dict.get("items", [])
         if results is None or len(results) == 0:
-            self.logger.info(f"No result items in the response for query: {query}")
+            self.logger.warning(f"No result items in the response for query: {query}")
             return []
 
         found_links = []
@@ -111,7 +114,7 @@ class Ask:
                     body_text = body_tag.get_text()
                     body_text = " ".join(body_text.split()).strip()
                     scrape_results[url] = body_text
-                    self.logger.info(f"Scraped {url}: {body_text}...")
+                    self.logger.debug(f"Scraped {url}: {body_text}...")
                 else:
                     self.logger.warning(
                         f"No body tag found in the response for url: {url}"
@@ -183,8 +186,8 @@ Here is the context:
             user_promt_template, {"query": query, "context": context}
         )
 
-        self.logger.info(f"Running inference with model: {model_name}")
-        self.logger.info(f"Final user prompt: {user_prompt}")
+        self.logger.debug(f"Running inference with model: {model_name}")
+        self.logger.debug(f"Final user prompt: {user_prompt}")
 
         api_client = self._get_api_client()
         completion = api_client.chat.completions.create(
@@ -216,37 +219,50 @@ Here is the context:
     default="gpt-4o-mini",
     help="Model name to use for inference",
 )
-def search_extract_summarize(query: str, model_name: str):
-    ask = Ask()
-    links = ask.search_for_query(query)
-    print(f"Found {len(links)} links for query: {query}")
-    for i, link in enumerate(links):
-        print(f"{i+1}. {link}")
+@click.option(
+    "-l",
+    "--log-level",
+    "log_level",
+    default="INFO",
+    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"], case_sensitive=False),
+    help="Set the logging level",
+    show_default=True,
+)
+def search_extract_summarize(query: str, model_name: str, log_level: str):
+    logger = logging.getLogger(__name__)
+    logger.setLevel(log_level)
+    logger.addHandler(logging.StreamHandler())
 
-    print("Scraping the URLs...")
+    ask = Ask(logger=logger)
+    links = ask.search_for_query(query)
+    logger.info(f"Found {len(links)} links for query: {query}")
+    for i, link in enumerate(links):
+        logger.debug(f"{i+1}. {link}")
+
+    logger.info("Scraping the URLs...")
     scrape_results = ask.scrape_urls(links)
 
-    print("Chunking the text...")
+    logger.info("Chunking the text...")
     chunking_results = ask.chunker(scrape_results, 1000, 100)
     for url, chunks in chunking_results.items():
-        print(f"URL: {url}")
+        logger.debug(f"URL: {url}")
         for i, chunk in enumerate(chunks):
-            print(f"Chunk {i+1}: {chunk}")
+            logger.debug(f"Chunk {i+1}: {chunk}")
 
-    print("Saving to DB...")
+    logger.info("Saving to vector DB...")
     ask.save_to_db(chunking_results)
 
-    print("Querying the DB...")
+    logger.info("Querying the vector DB...")
     results = ask.vector_search(query)
     for i, result in enumerate(results):
-        print(f"{i+1}. {result}")
+        logger.debug(f"{i+1}. {result}")
 
-    print("Running inference...")
+    logger.info("Running inference with context ...")
     answer = ask.run_inference(query, model_name, results)
-    print(f"Answer:\n{answer}\n")
-    print(f"References:\n")
+    click.echo(f"Answer:\n{answer}\n")
+    click.echo(f"References:\n")
     for i, result in enumerate(results):
-        print(f"[{i+1}] {result['metadata']['url']}")
+        click.echo(f"[{i+1}] {result['metadata']['url']}")
 
 
 if __name__ == "__main__":
