@@ -7,7 +7,7 @@ from typing import Any, Dict, List
 import click
 import requests
 from bs4 import BeautifulSoup
-from jinja2 import BaseLoader, Environment, TemplateSyntaxError, UndefinedError
+from jinja2 import BaseLoader, Environment
 from openai import OpenAI
 
 
