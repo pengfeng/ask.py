@@ -2,9 +2,11 @@ import json
 import logging
 import os
 import urllib.parse
+from typing import Dict, List
 
 import click
 import requests
+from bs4 import BeautifulSoup
 
 
 class Ask:
@@ -12,6 +14,8 @@ class Ask:
     def __init__(self):
         self.read_env_variables()
         self.logger = logging.getLogger(__name__)
+        self.logger.setLevel(logging.INFO)
+        self.logger.addHandler(logging.StreamHandler())
 
     def read_env_variables(self):
         err_msg = ""
@@ -26,7 +30,7 @@ class Ask:
         if err_msg != "":
             raise Exception(err_msg)
 
-    def search_for_query(self, query: str):
+    def search_for_query(self, query: str) -> List[str]:
         escaped_query = urllib.parse.quote(query)
         url_base = (
             f"https://www.googleapis.com/customsearch/v1?key={self.search_api_key}"
@@ -72,6 +76,38 @@ class Ask:
             found_links.append(link)
         return found_links
 
+    def scrape_urls(self, urls: List[str]) -> Dict[str, str]:
+        session = requests.Session()
+        user_agent: str = (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/119.0.0.0 Safari/537.36 Edg/119.0.0.0"
+        )
+        session.headers.update({"User-Agent": user_agent})
+
+        # the key is the url and the value is the body text
+        scrape_results: Dict[str, str] = {}
+
+        for url in urls:
+            try:
+                response = session.get(url, timeout=10)
+                soup = BeautifulSoup(response.content, "lxml", from_encoding="utf-8")
+
+                body_tag = soup.body
+                if body_tag:
+                    body_text = body_tag.get_text()
+                    body_text = " ".join(body_text.split()).strip()
+                    scrape_results[url] = body_text
+                    self.logger.info(f"Scraped {url}: {body_text[:100]}...")
+                else:
+                    self.logger.warning(
+                        f"No body tag found in the response for url: {url}"
+                    )
+            except Exception as e:
+                self.logger.error(f"scraping error {url}: {e}")
+                continue
+        return scrape_results
+
 
 @click.command(help="Search web for the query and summarize the results")
 @click.option("--query", "-q", required=True, help="Query to search")
@@ -81,6 +117,9 @@ def search_extract_summarize(query: str):
     print(f"Found {len(links)} links for query: {query}")
     for i, link in enumerate(links):
         print(f"{i+1}. {link}")
+
+    print("Scraping the URLs...")
+    scrape_results = ask.scrape_urls(links)
 
 
 if __name__ == "__main__":
