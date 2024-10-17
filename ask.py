@@ -98,7 +98,7 @@ class Ask:
                     body_text = body_tag.get_text()
                     body_text = " ".join(body_text.split()).strip()
                     scrape_results[url] = body_text
-                    self.logger.info(f"Scraped {url}: {body_text[:100]}...")
+                    self.logger.info(f"Scraped {url}: {body_text}...")
                 else:
                     self.logger.warning(
                         f"No body tag found in the response for url: {url}"
@@ -107,6 +107,20 @@ class Ask:
                 self.logger.error(f"scraping error {url}: {e}")
                 continue
         return scrape_results
+
+    def chunker(
+        self, scrape_results: Dict[str, str], size: int, overlap: int
+    ) -> Dict[str, List[str]]:
+        """
+        Chunk the text into smaller parts with overlap.
+        """
+        chunking_results: Dict[str, List[str]] = {}
+        for url, text in scrape_results.items():
+            chunks = []
+            for pos in range(0, len(text), size - overlap):
+                chunks.append(text[pos : pos + size])
+            chunking_results[url] = chunks
+        return chunking_results
 
 
 @click.command(help="Search web for the query and summarize the results")
@@ -120,6 +134,13 @@ def search_extract_summarize(query: str):
 
     print("Scraping the URLs...")
     scrape_results = ask.scrape_urls(links)
+
+    print("Chunking the text...")
+    chunking_results = ask.chunker(scrape_results, 1000, 100)
+    for url, chunks in chunking_results.items():
+        print(f"URL: {url}")
+        for i, chunk in enumerate(chunks):
+            print(f"Chunk {i+1}: {chunk}")
 
 
 if __name__ == "__main__":
