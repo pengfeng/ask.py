@@ -47,7 +47,7 @@ python ask.py -q "What is an LLM agent?"
 
 ## Sample output
 
-```Markdown
+<code>
 % python ask.py -q "Why do we need agentic RAG even if we have ChatGPT?"
 
 ✅ Found 10 links for query: Why do we need agentic RAG even if we have ChatGPT?
@@ -85,4 +85,4 @@ In summary, while ChatGPT excels in generating conversational responses, agentic
 [8] https://community.openai.com/t/how-to-use-rag-properly-and-what-types-of-query-it-is-good-at/658204
 [9] https://community.openai.com/t/how-to-use-rag-properly-and-what-types-of-query-it-is-good-at/658204
 [10] https://community.openai.com/t/prompt-engineering-for-rag/621495
-```
+</code>
