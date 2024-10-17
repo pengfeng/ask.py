@@ -7,7 +7,8 @@ from typing import Any, Dict, List
 import click
 import requests
 from bs4 import BeautifulSoup
-from vectordb import Memory
+from jinja2 import BaseLoader, Environment, TemplateSyntaxError, UndefinedError
+from openai import OpenAI
 
 
 class Ask:
@@ -18,6 +19,8 @@ class Ask:
         self.logger.setLevel(logging.INFO)
         self.logger.addHandler(logging.StreamHandler())
 
+        from vectordb import Memory
+
         self.memory = Memory()
 
     def read_env_variables(self):
@@ -25,13 +28,20 @@ class Ask:
 
         self.search_api_key = os.environ.get("SEARCH_API_KEY")
         if self.search_api_key is None:
-            err_msg += "\nSEARCH_API_KEY env variable not set.\n"
+            err_msg += "SEARCH_API_KEY env variable not set.\n"
         self.search_project_id = os.environ.get("SEARCH_PROJECT_KEY")
         if self.search_project_id is None:
             err_msg += "SEARCH_PROJECT_KEY env variable not set.\n"
+        self.llm_api_key = os.environ.get("LLM_API_KEY")
+        if self.llm_api_key is None:
+            err_msg += "LLM_API_KEY env variable not set.\n"
 
         if err_msg != "":
-            raise Exception(err_msg)
+            raise Exception(f"\n{err_msg}\n")
+
+        self.llm_base_url = os.environ.get("LLM_BASE_URL")
+        if self.llm_base_url is None:
+            self.llm_base_url = "https://api.openai.com/v1"
 
     def search_for_query(self, query: str) -> List[str]:
         escaped_query = urllib.parse.quote(query)
@@ -130,14 +140,83 @@ class Ask:
             for i, chunk in enumerate(chunks):
                 self.memory.save(texts=chunk, metadata={"url": url, "chunk": i})
 
-    def query_db(self, query: str) -> List[Dict[str, Any]]:
+    def vector_search(self, query: str) -> List[Dict[str, Any]]:
         results = self.memory.search(query, top_n=10)
         return results
+
+    def _get_api_client(self) -> OpenAI:
+        return OpenAI(api_key=self.llm_api_key, base_url=self.llm_base_url)
+
+    def _render_template(self, template_str: str, variables: Dict[str, Any]) -> str:
+        # Create an environment with a BaseLoader to prevent autoescaping,
+        # which is useful for non-HTML templates
+        env = Environment(loader=BaseLoader(), autoescape=False)
+        template = env.from_string(template_str)
+        return template.render(variables)
+
+    def run_inference(
+        self, query: str, model_name: str, matched_chunks: List[Dict[str, Any]]
+    ) -> str:
+        system_prompt = (
+            "You are expert summarizing the answers based on the provided contents."
+        )
+        user_promt_template = """
+Given the context as a sequence of references with a reference id in the 
+format of a leading [x], please answer the following question:
+
+{{ query }}
+
+In the answer, use format [1], [2], ..., [n] in line where the reference is used. 
+For example, "According to the research from Google[3], ...".
+
+Please create the answer strictly related to the context. If the context has no
+information about the query, please write "No related information found in the context."
+
+Here is the context:
+{{ context }}
+"""
+        context = ""
+        for i, chunk in enumerate(matched_chunks):
+            context += f"[{i+1}] {chunk['chunk']}\n"
+
+        user_prompt = self._render_template(
+            user_promt_template, {"query": query, "context": context}
+        )
+
+        self.logger.info(f"Running inference with model: {model_name}")
+        self.logger.info(f"Final user prompt: {user_prompt}")
+
+        api_client = self._get_api_client()
+        completion = api_client.chat.completions.create(
+            model=model_name,
+            messages=[
+                {
+                    "role": "system",
+                    "content": system_prompt,
+                },
+                {
+                    "role": "user",
+                    "content": user_prompt,
+                },
+            ],
+        )
+        if completion is None:
+            raise Exception("No completion from the API")
+
+        response_str = completion.choices[0].message.content
+        return response_str
 
 
 @click.command(help="Search web for the query and summarize the results")
 @click.option("--query", "-q", required=True, help="Query to search")
-def search_extract_summarize(query: str):
+@click.option(
+    "--model-name",
+    "-m",
+    required=False,
+    default="gpt-4o-mini",
+    help="Model name to use for inference",
+)
+def search_extract_summarize(query: str, model_name: str):
     ask = Ask()
     links = ask.search_for_query(query)
     print(f"Found {len(links)} links for query: {query}")
@@ -158,9 +237,16 @@ def search_extract_summarize(query: str):
     ask.save_to_db(chunking_results)
 
     print("Querying the DB...")
-    results = ask.query_db(query)
+    results = ask.vector_search(query)
     for i, result in enumerate(results):
         print(f"{i+1}. {result}")
+
+    print("Running inference...")
+    answer = ask.run_inference(query, model_name, results)
+    print(f"Answer:\n{answer}\n")
+    print(f"References:\n")
+    for i, result in enumerate(results):
+        print(f"[{i+1}] {result['metadata']['url']}")
 
 
 if __name__ == "__main__":
