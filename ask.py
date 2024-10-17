@@ -2,11 +2,12 @@ import json
 import logging
 import os
 import urllib.parse
-from typing import Dict, List
+from typing import Any, Dict, List
 
 import click
 import requests
 from bs4 import BeautifulSoup
+from vectordb import Memory
 
 
 class Ask:
@@ -16,6 +17,8 @@ class Ask:
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(logging.INFO)
         self.logger.addHandler(logging.StreamHandler())
+
+        self.memory = Memory()
 
     def read_env_variables(self):
         err_msg = ""
@@ -122,6 +125,15 @@ class Ask:
             chunking_results[url] = chunks
         return chunking_results
 
+    def save_to_db(self, chunking_results: Dict[str, List[str]]) -> None:
+        for url, chunks in chunking_results.items():
+            for i, chunk in enumerate(chunks):
+                self.memory.save(texts=chunk, metadata={"url": url, "chunk": i})
+
+    def query_db(self, query: str) -> List[Dict[str, Any]]:
+        results = self.memory.search(query, top_n=10)
+        return results
+
 
 @click.command(help="Search web for the query and summarize the results")
 @click.option("--query", "-q", required=True, help="Query to search")
@@ -141,6 +153,14 @@ def search_extract_summarize(query: str):
         print(f"URL: {url}")
         for i, chunk in enumerate(chunks):
             print(f"Chunk {i+1}: {chunk}")
+
+    print("Saving to DB...")
+    ask.save_to_db(chunking_results)
+
+    print("Querying the DB...")
+    results = ask.query_db(query)
+    for i, result in enumerate(results):
+        print(f"{i+1}. {result}")
 
 
 if __name__ == "__main__":
