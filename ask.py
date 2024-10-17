@@ -47,13 +47,17 @@ class Ask:
         if self.llm_base_url is None:
             self.llm_base_url = "https://api.openai.com/v1"
 
-    def search_web(self, query: str) -> List[str]:
+    def search_web(self, query: str, date_restrict: int, target_site: str) -> List[str]:
         escaped_query = urllib.parse.quote(query)
         url_base = (
             f"https://www.googleapis.com/customsearch/v1?key={self.search_api_key}"
             f"&cx={self.search_project_id}&q={escaped_query}"
         )
         url_paras = f"&safe=active"
+        if date_restrict is not None and date_restrict > 0:
+            url_paras += f"&dateRestrict={date_restrict}"
+        if target_site is not None and target_site != "":
+            url_paras += f"&siteSearch={target_site}&siteSearchFilter=i"
         url = f"{url_base}{url_paras}"
 
         self.logger.debug(f"Searching for query: {query}")
@@ -209,6 +213,21 @@ Here is the context:
 @click.command(help="Search web for the query and summarize the results")
 @click.option("--query", "-q", required=True, help="Query to search")
 @click.option(
+    "--date-restrict",
+    "-d",
+    type=int,
+    required=False,
+    default=None,
+    help="Restrict search results to a specific date range, default is no restriction",
+)
+@click.option(
+    "--target-site",
+    "-s",
+    required=False,
+    default=None,
+    help="Restrict search results to a specific site, default is no restriction",
+)
+@click.option(
     "--model-name",
     "-m",
     required=False,
@@ -224,19 +243,22 @@ Here is the context:
     help="Set the logging level",
     show_default=True,
 )
-def search_extract_summarize(query: str, model_name: str, log_level: str):
+def search_extract_summarize(
+    query: str, date_restrict: int, target_site: str, model_name: str, log_level: str
+):
     logger = logging.getLogger(__name__)
     logger.setLevel(log_level)
     logger.addHandler(logging.StreamHandler())
 
     ask = Ask(logger=logger)
-    links = ask.search_web(query)
+    links = ask.search_web(query, date_restrict, target_site)
     logger.info(f"✅ Found {len(links)} links for query: {query}")
     for i, link in enumerate(links):
         logger.debug(f"{i+1}. {link}")
 
     logger.info("✅ Scraping the URLs ...")
     scrape_results = ask.scrape_urls(links)
+    logger.info(f"✅ Scraped {len(scrape_results)} URLs ...")
 
     logger.info("✅ Chunking the text ...")
     chunking_results = ask.chunk_results(scrape_results, 1000, 100)
