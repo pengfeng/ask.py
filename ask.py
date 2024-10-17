@@ -46,7 +46,7 @@ class Ask:
         if self.llm_base_url is None:
             self.llm_base_url = "https://api.openai.com/v1"
 
-    def search_for_query(self, query: str) -> List[str]:
+    def search_web(self, query: str) -> List[str]:
         escaped_query = urllib.parse.quote(query)
         url_base = (
             f"https://www.googleapis.com/customsearch/v1?key={self.search_api_key}"
@@ -124,12 +124,9 @@ class Ask:
                 continue
         return scrape_results
 
-    def chunker(
+    def chunk_results(
         self, scrape_results: Dict[str, str], size: int, overlap: int
     ) -> Dict[str, List[str]]:
-        """
-        Chunk the text into smaller parts with overlap.
-        """
         chunking_results: Dict[str, List[str]] = {}
         for url, text in scrape_results.items():
             chunks = []
@@ -151,8 +148,6 @@ class Ask:
         return OpenAI(api_key=self.llm_api_key, base_url=self.llm_base_url)
 
     def _render_template(self, template_str: str, variables: Dict[str, Any]) -> str:
-        # Create an environment with a BaseLoader to prevent autoescaping,
-        # which is useful for non-HTML templates
         env = Environment(loader=BaseLoader(), autoescape=False)
         template = env.from_string(template_str)
         return template.render(variables)
@@ -234,7 +229,7 @@ def search_extract_summarize(query: str, model_name: str, log_level: str):
     logger.addHandler(logging.StreamHandler())
 
     ask = Ask(logger=logger)
-    links = ask.search_for_query(query)
+    links = ask.search_web(query)
     logger.info(f"Found {len(links)} links for query: {query}")
     for i, link in enumerate(links):
         logger.debug(f"{i+1}. {link}")
@@ -243,7 +238,7 @@ def search_extract_summarize(query: str, model_name: str, log_level: str):
     scrape_results = ask.scrape_urls(links)
 
     logger.info("Chunking the text...")
-    chunking_results = ask.chunker(scrape_results, 1000, 100)
+    chunking_results = ask.chunk_results(scrape_results, 1000, 100)
     for url, chunks in chunking_results.items():
         logger.debug(f"URL: {url}")
         for i, chunk in enumerate(chunks):

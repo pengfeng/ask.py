@@ -1,7 +1,11 @@
 # ask.py
 
-A simple Python program to implement the search-extract-summarize-ouput flow. Given a query, the
-program will
+A simple Python program to implement the search-extract-summarize-ouput flow, similar to the AI
+search engines such as Perplexity.
+
+## The flow
+
+Given a query, the program will
 
 - search Google for the top 10 web pages
 - crawl and scape the pages for their text content
@@ -9,6 +13,11 @@ program will
 - performing a vector search with the query and find the top 10 matched chunks
 - use the top 10 chunks as the context to ask an LLM to generate the answer
 - output the answer with the references
+
+Of course this flow is a very simplified version of the real AI search engines, but it is a good
+starting point to understand the basic concepts.
+
+## How to run the program
 
 ```Python
 
@@ -28,7 +37,17 @@ python ask.py -q "What is LLM?"
 
 ```text
 Answer:
-Large Language Models (LLMs) are a type of computational model primarily designed for natural language processing tasks, including language generation. They are very large deep learning models that are pre-trained on extensive datasets to understand and generate human language by learning statistical relationships from text. LLMs utilize a transformer-based architecture to efficiently process large-scale text data and can be fine-tuned for specific tasks or guided by prompt engineering [2][3][4]. They can perform various tasks, such as translation, summarization, sentiment analysis, and generating conversational responses, making them essential in fields like healthcare, customer service, marketing, and beyond[5][6][8]. The operational management of these models in production environments is referred to as LLMOps, which ensures their efficient deployment and maintenance[7][10].
+Large Language Models (LLMs) are a type of computational model primarily designed
+for natural language processing tasks, including language generation. They are very
+large deep learning models that are pre-trained on extensive datasets to understand
+and generate human language by learning statistical relationships from text. LLMs
+utilize a transformer-based architecture to efficiently process large-scale text
+data and can be fine-tuned for specific tasks or guided by prompt engineering [2][3][4].
+They can perform various tasks, such as translation, summarization, sentiment analysis,
+and generating conversational responses, making them essential in fields like healthcare,
+customer service, marketing, and beyond[5][6][8]. The operational management of these
+models in production environments is referred to as LLMOps, which ensures their efficient
+deployment and maintenance[7][10].
 
 References:
 
@@ -45,14 +64,10 @@ References:
 
 ```
 
-Libraries used:
+## Libraries and APIs used
 
 - [Google Search API](https://developers.google.com/custom-search/v1/overview)
 - [OpenAI API](https://beta.openai.com/docs/api-reference/completions/create)
 - [Jinja2](https://jinja.palletsprojects.com/en/3.0.x/)
 - [bs4](https://www.crummy.com/software/BeautifulSoup/bs4/doc/)
 - [vectordb2](https://github.com/kagisearch/vectordb)
-
-```
-
-```
