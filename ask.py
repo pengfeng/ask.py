@@ -231,32 +231,32 @@ def search_extract_summarize(query: str, model_name: str, log_level: str):
 
     ask = Ask(logger=logger)
     links = ask.search_web(query)
-    logger.info(f"Found {len(links)} links for query: {query}")
+    logger.info(f"✅ Found {len(links)} links for query: {query}")
     for i, link in enumerate(links):
         logger.debug(f"{i+1}. {link}")
 
-    logger.info("Scraping the URLs ...")
+    logger.info("✅ Scraping the URLs ...")
     scrape_results = ask.scrape_urls(links)
 
-    logger.info("Chunking the text ...")
+    logger.info("✅ Chunking the text ...")
     chunking_results = ask.chunk_results(scrape_results, 1000, 100)
     for url, chunks in chunking_results.items():
         logger.debug(f"URL: {url}")
         for i, chunk in enumerate(chunks):
             logger.debug(f"Chunk {i+1}: {chunk}")
 
-    logger.info("Saving to vector DB ...")
+    logger.info("✅ Saving to vector DB ...")
     ask.save_to_db(chunking_results)
 
-    logger.info("Querying the vector DB ...")
+    logger.info("✅ Querying the vector DB to get context ...")
     results = ask.vector_search(query)
     for i, result in enumerate(results):
         logger.debug(f"{i+1}. {result}")
 
-    logger.info("Running inference with context ...")
+    logger.info("✅ Running inference with context ...")
     answer = ask.run_inference(query, model_name, results)
-    click.echo(f"Answer:\n{answer}\n")
-    click.echo(f"References:\n")
+    click.echo(f"# Answer\n\n{answer}\n")
+    click.echo(f"# References\n")
     for i, result in enumerate(results):
         click.echo(f"[{i+1}] {result['metadata']['url']}")
 
