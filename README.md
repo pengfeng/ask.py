@@ -19,6 +19,12 @@ Given a query, the program will
 Of course this flow is a very simplified version of the real AI search engines, but it is a good
 starting point to understand the basic concepts.
 
+One benefit of this simple program is that you can manipulate the search function and output format.
+For example:
+
+- You can specify date-restrict to only retrieve the latest information
+- You can specify target-site to only create the answer from the contents from a specific site
+
 ## Quick start
 
 ```Python
@@ -35,6 +41,23 @@ export LLM_API_KEY="your-openai-api-key"
 
 # run the program, the first run will take a while to download the embedding model
 python ask.py -q "What is an LLM agent?"
+
+# we can specify more seach parameters such as date_restrict and target_site
+python ask.py --help
+Usage: ask.py [OPTIONS]
+
+  Search web for the query and summarize the results
+
+Options:
+  -q, --query TEXT                Query to search  [required]
+  -d, --date-restrict INTEGER     Restrict search results to a specific date
+                                  range, default is no restriction
+  -s, --target-site TEXT          Restrict search results to a specific site,
+                                  default is no restriction
+  -m, --model-name TEXT           Model name to use for inference
+  -l, --log-level [DEBUG|INFO|WARNING|ERROR]
+                                  Set the logging level  [default: INFO]
+  --help                          Show this message and exit.
 ```
 
 ## Libraries and APIs used
@@ -47,11 +70,14 @@ python ask.py -q "What is an LLM agent?"
 
 ## Sample output
 
+### General Search
+
 ```
 % python ask.py -q "Why do we need agentic RAG even if we have ChatGPT?"
 
 ✅ Found 10 links for query: Why do we need agentic RAG even if we have ChatGPT?
 ✅ Scraping the URLs ...
+✅ Scraped 10 URLs ...
 ✅ Chunking the text ...
 ✅ Saving to vector DB ...
 ✅ Querying the vector DB ...
@@ -102,4 +128,47 @@ AI experience.
 [8] https://community.openai.com/t/how-to-use-rag-properly-and-what-types-of-query-it-is-good-at/658204
 [9] https://community.openai.com/t/how-to-use-rag-properly-and-what-types-of-query-it-is-good-at/658204
 [10] https://community.openai.com/t/prompt-engineering-for-rag/621495
+```
+
+### Only use the latest information from a specific site
+
+```
+% python ask.py -q "OpenAI Swarm Framework" -d 1 -s openai.com
+✅ Found 10 links for query: OpenAI Swarm Framework
+✅ Scraping the URLs ...
+✅ Scraped 10 URLs ...
+✅ Chunking the text ...
+✅ Saving to vector DB ...
+✅ Querying the vector DB to get context ...
+✅ Running inference with context ...
+
+# Answer
+
+OpenAI Swarm Framework is an experimental platform designed for building, orchestrating, and
+deploying multi-agent systems, enabling multiple AI agents to collaborate on complex tasks. It contrasts
+with traditional single-agent models by facilitating agent interaction and coordination, thus enhancing
+efficiency[5][9]. The framework provides developers with a way to orchestrate these agent systems in
+a lightweight manner, leveraging Node.js for scalable applications[1][4].
+
+One implementation of this framework is Swarm.js, which serves as a Node.js SDK, allowing users to
+create and manage agents that perform tasks and hand off conversations. Swarm.js is positioned as
+an educational tool, making it accessible for both beginners and experts, although it may still contain
+bugs and is currently lightweight[1][3][7]. This new approach emphasizes multi-agent collaboration and is
+well-suited for back-end development, requiring some programming expertise for effective implementation[9].
+
+Overall, OpenAI Swarm facilitates a shift in how AI systems can collaborate, differing from existing
+OpenAI tools by focusing on backend orchestration rather than user-interactive front-end applications[9].
+
+# References
+
+[1] https://community.openai.com/t/introducing-swarm-js-node-js-implementation-of-openai-swarm/977510
+[2] https://community.openai.com/t/introducing-swarm-js-a-node-js-implementation-of-openai-swarm/977510
+[3] https://community.openai.com/t/introducing-swarm-js-node-js-implementation-of-openai-swarm/977510
+[4] https://community.openai.com/t/introducing-swarm-js-a-node-js-implementation-of-openai-swarm/977510
+[5] https://community.openai.com/t/swarm-some-initial-insights/976602
+[6] https://community.openai.com/t/swarm-some-initial-insights/976602
+[7] https://community.openai.com/t/introducing-swarm-js-node-js-implementation-of-openai-swarm/977510
+[8] https://community.openai.com/t/introducing-swarm-js-a-node-js-implementation-of-openai-swarm/977510
+[9] https://community.openai.com/t/swarm-some-initial-insights/976602
+[10] https://community.openai.com/t/swarm-some-initial-insights/976602
 ```

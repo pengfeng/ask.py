@@ -258,7 +258,7 @@ def search_extract_summarize(
 
     logger.info("✅ Scraping the URLs ...")
     scrape_results = ask.scrape_urls(links)
-    logger.info(f"✅ Scraped {len(scrape_results)} URLs")
+    logger.info(f"✅ Scraped {len(scrape_results)} URLs ...")
 
     logger.info("✅ Chunking the text ...")
     chunking_results = ask.chunk_results(scrape_results, 1000, 100)
