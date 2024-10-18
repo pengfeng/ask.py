@@ -2,7 +2,9 @@ import json
 import logging
 import os
 import urllib.parse
-from typing import Any, Dict, List, Optional
+from concurrent.futures import ThreadPoolExecutor
+from functools import partial
+from typing import Any, Dict, List, Optional, Tuple
 
 import click
 import requests
@@ -34,6 +36,14 @@ class Ask:
         from vectordb import Memory
 
         self.memory = Memory()
+
+        self.session = requests.Session()
+        user_agent: str = (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/119.0.0.0 Safari/537.36 Edg/119.0.0.0"
+        )
+        self.session.headers.update({"User-Agent": user_agent})
 
     def read_env_variables(self) -> None:
         err_msg = ""
@@ -105,36 +115,42 @@ class Ask:
             found_links.append(link)
         return found_links
 
-    def scrape_urls(self, urls: List[str]) -> Dict[str, str]:
-        session = requests.Session()
-        user_agent: str = (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/119.0.0.0 Safari/537.36 Edg/119.0.0.0"
-        )
-        session.headers.update({"User-Agent": user_agent})
+    def _scape_url(self, url: str) -> Tuple[str, str]:
+        try:
+            response = self.session.get(url, timeout=10)
+            soup = BeautifulSoup(response.content, "lxml", from_encoding="utf-8")
 
+            body_tag = soup.body
+            if body_tag:
+                body_text = body_tag.get_text()
+                body_text = " ".join(body_text.split()).strip()
+                self.logger.debug(f"Scraped {url}: {body_text}...")
+                if len(body_text) > 100:
+                    return url, body_text
+                else:
+                    self.logger.warning(
+                        f"Body text too short for url: {url}, length: {len(body_text)}"
+                    )
+                    return url, ""
+            else:
+                self.logger.warning(f"No body tag found in the response for url: {url}")
+                return url, ""
+        except Exception as e:
+            self.logger.error(f"Scraping error {url}: {e}")
+            return url, ""
+
+    def scrape_urls(self, urls: List[str]) -> Dict[str, str]:
         # the key is the url and the value is the body text
         scrape_results: Dict[str, str] = {}
 
-        for url in urls:
-            try:
-                response = session.get(url, timeout=10)
-                soup = BeautifulSoup(response.content, "lxml", from_encoding="utf-8")
+        partial_scrape = partial(self._scape_url)
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            results = executor.map(partial_scrape, urls)
 
-                body_tag = soup.body
-                if body_tag:
-                    body_text = body_tag.get_text()
-                    body_text = " ".join(body_text.split()).strip()
-                    scrape_results[url] = body_text
-                    self.logger.debug(f"Scraped {url}: {body_text}...")
-                else:
-                    self.logger.warning(
-                        f"No body tag found in the response for url: {url}"
-                    )
-            except Exception as e:
-                self.logger.error(f"scraping error {url}: {e}")
-                continue
+        for url, body_text in results:
+            if body_text != "":
+                scrape_results[url] = body_text
+
         return scrape_results
 
     def chunk_results(
