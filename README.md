@@ -5,6 +5,10 @@
 A single Python program to implement the search-extract-summarize flow, similar to AI search
 engines such as Perplexity.
 
+> [!NOTE]
+> Our goal is to illustrate the basic concepts of AI search engines with the raw constructs. Performance
+> or scalability is not in the scope of this program.
+
 ## The search-extract-summarize flow
 
 Given a query, the program will
@@ -25,6 +29,8 @@ For example:
 
 - You can specify date-restrict to only retrieve the latest information
 - You can specify target-site to only create the answer from the contents from a specific site
+- You can specify the output language of the answer
+- You can specify the answer length in words
 
 ## Quick start
 
@@ -55,6 +61,8 @@ Options:
                                   range, default is no restriction
   -s, --target-site TEXT          Restrict search results to a specific site,
                                   default is no restriction
+  --output-language TEXT          Output language for the answer
+  --output-length INTEGER         Output length for the answer
   -m, --model-name TEXT           Model name to use for inference
   -l, --log-level [DEBUG|INFO|WARNING|ERROR]
                                   Set the logging level  [default: INFO]
