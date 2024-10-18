@@ -11,6 +11,16 @@ from jinja2 import BaseLoader, Environment
 from openai import OpenAI
 
 
+def get_logger(log_level: str) -> logging.Logger:
+    logger = logging.getLogger(__name__)
+    logger.setLevel(log_level)
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    return logger
+
+
 class Ask:
 
     def __init__(self, logger: Optional[logging.Logger] = None):
@@ -19,9 +29,7 @@ class Ask:
         if logger is not None:
             self.logger = logger
         else:
-            self.logger = logging.getLogger(__name__)
-            self.logger.setLevel(logging.INFO)
-            self.logger.addHandler(logging.StreamHandler())
+            self.logger = get_logger("INFO")
 
         from vectordb import Memory
 
@@ -246,11 +254,10 @@ Here is the context:
 def search_extract_summarize(
     query: str, date_restrict: int, target_site: str, model_name: str, log_level: str
 ):
-    logger = logging.getLogger(__name__)
-    logger.setLevel(log_level)
-    logger.addHandler(logging.StreamHandler())
+    logger = get_logger(log_level)
 
     ask = Ask(logger=logger)
+    logger.info("✅ Searching the web ...")
     links = ask.search_web(query, date_restrict, target_site)
     logger.info(f"✅ Found {len(links)} links for query: {query}")
     for i, link in enumerate(links):
@@ -277,6 +284,7 @@ def search_extract_summarize(
 
     logger.info("✅ Running inference with context ...")
     answer = ask.run_inference(query, model_name, results)
+    logger.info("✅ Finished inference, generateing output ...")
     click.echo(f"# Answer\n\n{answer}\n")
     click.echo(f"# References\n")
     for i, result in enumerate(results):
