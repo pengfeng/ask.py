@@ -166,14 +166,18 @@ class Ask:
         return template.render(variables)
 
     def run_inference(
-        self, query: str, model_name: str, matched_chunks: List[Dict[str, Any]]
+        self,
+        query: str,
+        model_name: str,
+        matched_chunks: List[Dict[str, Any]],
+        output_language: str,
     ) -> str:
         system_prompt = (
             "You are expert summarizing the answers based on the provided contents."
         )
         user_promt_template = """
 Given the context as a sequence of references with a reference id in the 
-format of a leading [x], please answer the following question:
+format of a leading [x], please answer the following question using {{ language }}:
 
 {{ query }}
 
@@ -182,6 +186,7 @@ For example, "According to the research from Google[3], ...".
 
 Please create the answer strictly related to the context. If the context has no
 information about the query, please write "No related information found in the context."
+using {{ language }}.
 
 Here is the context:
 {{ context }}
@@ -191,7 +196,8 @@ Here is the context:
             context += f"[{i+1}] {chunk['chunk']}\n"
 
         user_prompt = self._render_template(
-            user_promt_template, {"query": query, "context": context}
+            user_promt_template,
+            {"query": query, "context": context, "language": output_language},
         )
 
         self.logger.debug(f"Running inference with model: {model_name}")
@@ -236,6 +242,12 @@ Here is the context:
     help="Restrict search results to a specific site, default is no restriction",
 )
 @click.option(
+    "--output-language",
+    required=False,
+    default="English",
+    help="Output language for the answer",
+)
+@click.option(
     "--model-name",
     "-m",
     required=False,
@@ -252,7 +264,12 @@ Here is the context:
     show_default=True,
 )
 def search_extract_summarize(
-    query: str, date_restrict: int, target_site: str, model_name: str, log_level: str
+    query: str,
+    date_restrict: int,
+    target_site: str,
+    output_language: str,
+    model_name: str,
+    log_level: str,
 ):
     logger = get_logger(log_level)
 
@@ -278,16 +295,21 @@ def search_extract_summarize(
     ask.save_to_db(chunking_results)
 
     logger.info("✅ Querying the vector DB to get context ...")
-    results = ask.vector_search(query)
-    for i, result in enumerate(results):
+    matched_chunks = ask.vector_search(query)
+    for i, result in enumerate(matched_chunks):
         logger.debug(f"{i+1}. {result}")
 
     logger.info("✅ Running inference with context ...")
-    answer = ask.run_inference(query, model_name, results)
+    answer = ask.run_inference(
+        query=query,
+        model_name=model_name,
+        matched_chunks=matched_chunks,
+        output_language=output_language,
+    )
     logger.info("✅ Finished inference, generateing output ...")
     click.echo(f"# Answer\n\n{answer}\n")
     click.echo(f"# References\n")
-    for i, result in enumerate(results):
+    for i, result in enumerate(matched_chunks):
         click.echo(f"[{i+1}] {result['metadata']['url']}")
 
 
