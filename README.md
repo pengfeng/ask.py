@@ -5,7 +5,7 @@
 A single Python program to implement the search-extract-summarize flow, similar to AI search
 engines such as Perplexity.
 
-## The seach-extract-summarize flow
+## The search-extract-summarize flow
 
 Given a query, the program will
 
@@ -43,7 +43,7 @@ export LLM_API_KEY="your-openai-api-key"
 # run the program, the first run will take a while to download the embedding model
 python ask.py -q "What is an LLM agent?"
 
-# we can specify more seach parameters such as date_restrict and target_site
+# we can specify more search parameters such as date_restrict and target_site
 python ask.py --help
 Usage: ask.py [OPTIONS]
 
