@@ -187,6 +187,7 @@ class Ask:
         model_name: str,
         matched_chunks: List[Dict[str, Any]],
         output_language: str,
+        output_length: int,
     ) -> str:
         system_prompt = (
             "You are expert summarizing the answers based on the provided contents."
@@ -204,6 +205,8 @@ Please create the answer strictly related to the context. If the context has no
 information about the query, please write "No related information found in the context."
 using {{ language }}.
 
+{{ length_instructions }}
+
 Here is the context:
 {{ context }}
 """
@@ -211,9 +214,21 @@ Here is the context:
         for i, chunk in enumerate(matched_chunks):
             context += f"[{i+1}] {chunk['chunk']}\n"
 
+        if output_length is None:
+            length_instructions = ""
+        else:
+            length_instructions = (
+                f"Please provide the answer in { output_length } words."
+            )
+
         user_prompt = self._render_template(
             user_promt_template,
-            {"query": query, "context": context, "language": output_language},
+            {
+                "query": query,
+                "context": context,
+                "language": output_language,
+                "length_instructions": length_instructions,
+            },
         )
 
         self.logger.debug(f"Running inference with model: {model_name}")
@@ -264,6 +279,13 @@ Here is the context:
     help="Output language for the answer",
 )
 @click.option(
+    "--output-length",
+    type=int,
+    required=False,
+    default=None,
+    help="Output length for the answer",
+)
+@click.option(
     "--model-name",
     "-m",
     required=False,
@@ -284,6 +306,7 @@ def search_extract_summarize(
     date_restrict: int,
     target_site: str,
     output_language: str,
+    output_length: int,
     model_name: str,
     log_level: str,
 ):
@@ -321,6 +344,7 @@ def search_extract_summarize(
         model_name=model_name,
         matched_chunks=matched_chunks,
         output_language=output_language,
+        output_length=output_length,
     )
     logger.info("✅ Finished inference, generateing output ...")
     click.echo(f"# Answer\n\n{answer}\n")
