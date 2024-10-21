@@ -9,9 +9,12 @@ from typing import Any, Dict, List, Optional, Tuple
 import click
 import requests
 from bs4 import BeautifulSoup
+from dotenv import load_dotenv
 from jinja2 import BaseLoader, Environment
-from numpy import require
 from openai import OpenAI
+
+script_dir = os.path.dirname(os.path.abspath(__file__))
+default_env_file = os.path.abspath(os.path.join(script_dir, ".env"))
 
 
 def get_logger(log_level: str) -> logging.Logger:
@@ -262,7 +265,7 @@ Here is the context:
     "--url-list",
     type=str,
     required=False,
-    default="instructions/links.txt",
+    default=None,
     show_default=True,
     help="Instead of doing web search, scrape the target URL list and answer the query based on the content",
 )
@@ -321,6 +324,8 @@ def search_extract_summarize(
     log_level: str,
 ):
     logger = get_logger(log_level)
+
+    load_dotenv(dotenv_path=default_env_file, override=False)
 
     ask = Ask(logger=logger)
 
