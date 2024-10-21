@@ -31,6 +31,7 @@ For example:
 - You can search in a target-site to only create the answer from the contents from it.
 - You can ask LLM to use a specific language to answer the question.
 - You can ask LLM to answer with a specific length.
+- You can crawl a specific list of urls and answer based on their contents only.
 
 ## Quick start
 
@@ -57,6 +58,10 @@ Usage: ask.py [OPTIONS]
 
 Options:
   -q, --query TEXT                Query to search  [required]
+  --url-list TEXT                 Instead of doing web search, scrape the
+                                  target URL list and answer the query based
+                                  on the content  [default:
+                                  instructions/links.txt]
   -d, --date-restrict INTEGER     Restrict search results to a specific date
                                   range, default is no restriction
   -s, --target-site TEXT          Restrict search results to a specific site,

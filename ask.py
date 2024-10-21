@@ -10,6 +10,7 @@ import click
 import requests
 from bs4 import BeautifulSoup
 from jinja2 import BaseLoader, Environment
+from numpy import require
 from openai import OpenAI
 
 
@@ -258,6 +259,14 @@ Here is the context:
 @click.command(help="Search web for the query and summarize the results")
 @click.option("--query", "-q", required=True, help="Query to search")
 @click.option(
+    "--url-list",
+    type=str,
+    required=False,
+    default="instructions/links.txt",
+    show_default=True,
+    help="Instead of doing web search, scrape the target URL list and answer the query based on the content",
+)
+@click.option(
     "--date-restrict",
     "-d",
     type=int,
@@ -303,6 +312,7 @@ Here is the context:
 )
 def search_extract_summarize(
     query: str,
+    url_list: str,
     date_restrict: int,
     target_site: str,
     output_language: str,
@@ -313,11 +323,21 @@ def search_extract_summarize(
     logger = get_logger(log_level)
 
     ask = Ask(logger=logger)
-    logger.info("✅ Searching the web ...")
-    links = ask.search_web(query, date_restrict, target_site)
-    logger.info(f"✅ Found {len(links)} links for query: {query}")
-    for i, link in enumerate(links):
-        logger.debug(f"{i+1}. {link}")
+
+    if url_list is None:
+        logger.info("✅ Searching the web ...")
+        links = ask.search_web(query, date_restrict, target_site)
+        logger.info(f"✅ Found {len(links)} links for query: {query}")
+        for i, link in enumerate(links):
+            logger.debug(f"{i+1}. {link}")
+    else:
+        with open(url_list, "r") as f:
+            links = f.readlines()
+        links = [
+            link.strip()
+            for link in links
+            if link.strip() != "" and not link.startswith("#")
+        ]
 
     logger.info("✅ Scraping the URLs ...")
     scrape_results = ask.scrape_urls(links)
