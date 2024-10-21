@@ -6,3 +6,4 @@ tensorflow-hub==0.16.1
 vectordb2==0.1.9
 bs4==0.0.2
 lxml==4.8.0
+python-dotenv==1.0.1
