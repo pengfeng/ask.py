@@ -5,7 +5,7 @@
 A single Python program to implement the search-extract-summarize flow, similar to AI search
 engines such as Perplexity.
 
-> [!UPDATE]
+> [UPDATE]
 >
 > - 2024-10-22: add GradIO integation
 > - 2024-10-21: use DuckDB for the vector search and use API for embedding
