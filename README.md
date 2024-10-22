@@ -9,6 +9,10 @@ engines such as Perplexity.
 > Our main goal is to illustrate the basic concepts of AI search engines with the raw constructs.
 > Performance or scalability is not in the scope of this program.
 
+> [Update]
+> - Added GradIO UI
+![image](https://github.com/user-attachments/assets/0483e6a2-75d7-4fbd-813f-bfa13839c836)
+
 ## The search-extract-summarize flow
 
 Given a query, the program will
