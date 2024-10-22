@@ -7,6 +7,7 @@ from functools import partial
 from typing import Any, Dict, List, Optional, Tuple
 
 import click
+import duckdb
 import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
@@ -37,9 +38,25 @@ class Ask:
         else:
             self.logger = get_logger("INFO")
 
-        from vectordb import Memory
+        self.table_name = "document_chunks"
+        self.db_con = duckdb.connect(":memory:")
 
-        self.memory = Memory()
+        self.db_con.install_extension("vss")
+        self.db_con.load_extension("vss")
+        self.db_con.install_extension("fts")
+        self.db_con.load_extension("fts")
+        self.db_con.sql("CREATE SEQUENCE seq_docid START 1000")
+
+        self.db_con.execute(
+            f"""
+CREATE TABLE {self.table_name} (
+    doc_id INTEGER PRIMARY KEY DEFAULT nextval('seq_docid'),
+    url TEXT,
+    chunk TEXT,
+    vec FLOAT[{self.embedding_dimensions}]
+);
+"""
+        )
 
         self.session = requests.Session()
         user_agent: str = (
@@ -68,6 +85,13 @@ class Ask:
         self.llm_base_url = os.environ.get("LLM_BASE_URL")
         if self.llm_base_url is None:
             self.llm_base_url = "https://api.openai.com/v1"
+
+        self.embedding_model = os.environ.get("EMBEDDING_MODEL")
+        self.embedding_dimensions = os.environ.get("EMBEDDING_DIMENSIONS")
+
+        if self.embedding_model is None or self.embedding_dimensions is None:
+            self.embedding_model = "text-embedding-3-small"
+            self.embedding_dimensions = 1536
 
     def search_web(self, query: str, date_restrict: int, target_site: str) -> List[str]:
         escaped_query = urllib.parse.quote(query)
@@ -168,14 +192,111 @@ class Ask:
             chunking_results[url] = chunks
         return chunking_results
 
+    def get_embedding(self, client: OpenAI, texts: List[str]) -> List[List[float]]:
+        response = client.embeddings.create(input=texts, model=self.embedding_model)
+        embeddings = []
+        for i in range(len(response.data)):
+            embeddings.append(response.data[i].embedding)
+        return embeddings
+
+    def batch_get_embedding(
+        self, client: OpenAI, chunk_batch: Tuple[str, List[str]]
+    ) -> Tuple[Tuple[str, List[str]], List[List[float]]]:
+        """
+        We need to return the chunk_batch as well as the embeddings for each chunk so that
+        we can aggregate them and save them to the database together.
+
+        Args:
+        - client: OpenAI client
+        - chunk_batch: Tuple of URL and list of chunks
+
+        Returns:
+        - Tuple of chunk_bach and list of result embeddings
+        """
+        texts = chunk_batch[1]
+        embeddings = self.get_embedding(client, texts)
+        return chunk_batch, embeddings
+
     def save_to_db(self, chunking_results: Dict[str, List[str]]) -> None:
-        for url, chunks in chunking_results.items():
-            for i, chunk in enumerate(chunks):
-                self.memory.save(texts=chunk, metadata={"url": url, "chunk": i})
+        client = self._get_api_client()
+        embed_batch_size = 50
+        query_batch_size = 100
+        insert_data = []
+
+        batches: List[Tuple[str, List[str]]] = []
+        for url, list_chunks in chunking_results.items():
+            for i in range(0, len(list_chunks), embed_batch_size):
+                list_chunks = list_chunks[i : i + embed_batch_size]
+                batches.append((url, list_chunks))
+
+        self.logger.info(f"Embedding {len(batches)} batches of chunks ...")
+        partial_get_embedding = partial(self.batch_get_embedding, client)
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            all_embeddings = executor.map(partial_get_embedding, batches)
+        self.logger.info(f"✅ Finshed embedding.")
+
+        for chunk_batch, embeddings in all_embeddings:
+            url = chunk_batch[0]
+            list_chunks = chunk_batch[1]
+            insert_data.extend(
+                [
+                    (url.replace("'", " "), chunk.replace("'", " "), embedding)
+                    for chunk, embedding in zip(list_chunks, embeddings)
+                ]
+            )
+
+        for i in range(0, len(insert_data), query_batch_size):
+            # Insert the batch into DuckDB
+            value_str = ", ".join(
+                [
+                    f"('{url}', '{chunk}', {embedding})"
+                    for url, chunk, embedding in insert_data[i : i + embed_batch_size]
+                ]
+            )
+            query = f"""
+            INSERT INTO {self.table_name} (url, chunk, vec) VALUES {value_str};
+            """
+            self.db_con.execute(query)
+
+        self.db_con.execute(
+            f"""
+                CREATE INDEX cos_idx ON {self.table_name} USING HNSW (vec)
+                WITH (metric = 'cosine');
+            """
+        )
+        self.logger.info(f"✅ Created the vector index ...")
+        self.db_con.execute(
+            f"""
+                PRAGMA create_fts_index(
+                {self.table_name}, 'doc_id', 'chunk'
+                );    
+            """
+        )
+        self.logger.info(f"✅ Created the full text search index ...")
 
     def vector_search(self, query: str) -> List[Dict[str, Any]]:
-        results = self.memory.search(query, top_n=10)
-        return results
+        client = self._get_api_client()
+        embeddings = self.get_embedding(client, [query])[0]
+
+        query_result: duckdb.DuckDBPyRelation = self.db_con.sql(
+            f"""
+            SELECT * FROM {self.table_name} 
+            ORDER BY array_distance(vec, {embeddings}::FLOAT[{self.embedding_dimensions}]) 
+            LIMIT 10;         
+        """
+        )
+
+        self.logger.debug(query_result)
+
+        matched_chunks = []
+        for record in query_result.fetchall():
+            result_record = {
+                "url": record[1],
+                "chunk": record[2],
+            }
+            matched_chunks.append(result_record)
+
+        return matched_chunks
 
     def _get_api_client(self) -> OpenAI:
         return OpenAI(api_key=self.llm_api_key, base_url=self.llm_base_url)
@@ -330,7 +451,7 @@ def search_extract_summarize(
     ask = Ask(logger=logger)
 
     if url_list is None:
-        logger.info("✅ Searching the web ...")
+        logger.info("Searching the web ...")
         links = ask.search_web(query, date_restrict, target_site)
         logger.info(f"✅ Found {len(links)} links for query: {query}")
         for i, link in enumerate(links):
@@ -344,26 +465,31 @@ def search_extract_summarize(
             if link.strip() != "" and not link.startswith("#")
         ]
 
-    logger.info("✅ Scraping the URLs ...")
+    logger.info("Scraping the URLs ...")
     scrape_results = ask.scrape_urls(links)
-    logger.info(f"✅ Scraped {len(scrape_results)} URLs ...")
+    logger.info(f"✅ Scraped {len(scrape_results)} URLs.")
 
-    logger.info("✅ Chunking the text ...")
+    logger.info("Chunking the text ...")
     chunking_results = ask.chunk_results(scrape_results, 1000, 100)
+    total_chunks = 0
     for url, chunks in chunking_results.items():
         logger.debug(f"URL: {url}")
+        total_chunks += len(chunks)
         for i, chunk in enumerate(chunks):
             logger.debug(f"Chunk {i+1}: {chunk}")
+    logger.info(f"✅ Generated {total_chunks} chunks ...")
 
-    logger.info("✅ Saving to vector DB ...")
+    logger.info(f"Saving {total_chunks} chunks to DB ...")
     ask.save_to_db(chunking_results)
+    logger.info(f"✅ Successfully embedded and saved chunks to DB.")
 
-    logger.info("✅ Querying the vector DB to get context ...")
+    logger.info("Querying the vector DB to get context ...")
     matched_chunks = ask.vector_search(query)
     for i, result in enumerate(matched_chunks):
         logger.debug(f"{i+1}. {result}")
+    logger.info(f"✅ Got {len(matched_chunks)} matched chunks.")
 
-    logger.info("✅ Running inference with context ...")
+    logger.info("Running inference with context ...")
     answer = ask.run_inference(
         query=query,
         model_name=model_name,
@@ -371,11 +497,13 @@ def search_extract_summarize(
         output_language=output_language,
         output_length=output_length,
     )
-    logger.info("✅ Finished inference, generateing output ...")
+    logger.info("✅ Finished inference API call.")
+    logger.info("generateing output ...")
+
     click.echo(f"# Answer\n\n{answer}\n")
     click.echo(f"# References\n")
     for i, result in enumerate(matched_chunks):
-        click.echo(f"[{i+1}] {result['metadata']['url']}")
+        click.echo(f"[{i+1}] {result['url']}")
 
 
 if __name__ == "__main__":
