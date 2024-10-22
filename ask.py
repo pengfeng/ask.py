@@ -479,12 +479,27 @@ def launch_gradio(
         fn=_run_query,
         inputs=[
             gr.Textbox(label="Query", value=query),
-            gr.Number(label="Date Restrict (Optional)", value=date_restrict),
-            gr.Textbox(label="Target Sites (Optional)", value=target_site),
-            gr.Textbox(label="Output Language (Optional)", value=output_language),
-            gr.Number(label="Output Length in words (Optional)", value=output_length),
+            gr.Number(
+                label="Date Restrict (Optional) [0 or empty means no date limit.]",
+                value=date_restrict,
+            ),
             gr.Textbox(
-                label="URL List (Optional)", lines=5, max_lines=20, value=url_list_str
+                label="Target Sites (Optional) [Empty means seach the whole web.]",
+                value=target_site,
+            ),
+            gr.Textbox(
+                label="Output Language (Optional) [Default is English.]",
+                value=output_language,
+            ),
+            gr.Number(
+                label="Output Length in words (Optional) [Default is automatically decided by LLM.]",
+                value=output_length,
+            ),
+            gr.Textbox(
+                label="URL List (Optional) [When specified, scrape the urls instead of searching the web.]",
+                lines=5,
+                max_lines=20,
+                value=url_list_str,
             ),
         ],
         additional_inputs=[
@@ -495,7 +510,7 @@ def launch_gradio(
         show_progress=True,
         flagging_options=[("Report Error", None)],
         title="Ask.py - Web Search-Extract-Summarize",
-        description="Search the web with the query and summarize the results.",
+        description="Search the web with the query and summarize the results. Source code: https://github.com/pengfeng/ask.py",
     )
 
     iface.launch()
