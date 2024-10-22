@@ -6,8 +6,8 @@ A single Python program to implement the search-extract-summarize flow, similar 
 engines such as Perplexity.
 
 > [!NOTE]
-> Our goal is to illustrate the basic concepts of AI search engines with the raw constructs. Performance
-> or scalability is not in the scope of this program.
+> Our main goal is to illustrate the basic concepts of AI search engines with the raw constructs.
+> Performance or scalability is not in the scope of this program.
 
 ## The search-extract-summarize flow
 
@@ -16,29 +16,30 @@ Given a query, the program will
 - search Google for the top 10 web pages
 - crawl and scape the pages for their text content
 - chunk the text content into chunks and save them into a vectordb
-- performing a vector search with the query and find the top 10 matched chunks
+- perform a vector search with the query and find the top 10 matched chunks
 - use the top 10 chunks as the context to ask an LLM to generate the answer
 - output the answer with the references
 
 Of course this flow is a very simplified version of the real AI search engines, but it is a good
 starting point to understand the basic concepts.
 
-One benefit of this simple program is that you can manipulate the search function and output format.
+One benefit is that we can manipulate the search function and output format.
 
-For example:
+For example, we can:
 
-- You can search with date-restrict to only retrieve the latest information.
-- You can search in a target-site to only create the answer from the contents from it.
-- You can ask LLM to use a specific language to answer the question.
-- You can ask LLM to answer with a specific length.
-- You can crawl a specific list of urls and answer based on their contents only.
+- search with date-restrict to only retrieve the latest information.
+- search within a target-site to only create the answer from the contents from it.
+- ask LLM to use a specific language to answer the question.
+- ask LLM to answer with a specific length.
+- crawl a specific list of urls and answer based on those contents only.
 
 ## Quick start
 
 ```bash
 
-# the tensorflow library takes a while to install if running for the first time
 pip install -r requirements.txt
+
+# modify .env file to set the API keys or export them as environment variables as below
 
 # right now we use Google search API
 export SEARCH_API_KEY="your-google-search-api-key"
@@ -47,10 +48,10 @@ export SEARCH_PROJECT_KEY="your-google-cx-key"
 # right now we use OpenAI API
 export LLM_API_KEY="your-openai-api-key"
 
-# run the program, the first run will take a while to download the embedding model
+# run the program
 python ask.py -q "What is an LLM agent?"
 
-# we can specify more search parameters such as date_restrict and target_site
+# we can specify more parameters to control the behavior such as date_restrict and target_site
 python ask.py --help
 Usage: ask.py [OPTIONS]
 
@@ -80,7 +81,7 @@ Options:
 - [OpenAI API](https://beta.openai.com/docs/api-reference/completions/create)
 - [Jinja2](https://jinja.palletsprojects.com/en/3.0.x/)
 - [bs4](https://www.crummy.com/software/BeautifulSoup/bs4/doc/)
-- [vectordb2](https://github.com/kagisearch/vectordb)
+- [duckdb](https://github.com/duckdb/duckdb)
 
 ## Sample output
 
@@ -146,8 +147,9 @@ AI experience.
 
 ### Only use the latest information from a specific site
 
-This following query will only use the information from openai.com that are updated in the last day.
-The behavior is similar to the "site:openai.com" and "date-restrict" search parameters in Google search.
+This following query will only use the information from openai.com that are updated in the previous
+day. The behavior is similar to the "site:openai.com" and "date-restrict" search parameters in Google
+search.
 
 ```
 % python ask.py -q "OpenAI Swarm Framework" -d 1 -s openai.com
