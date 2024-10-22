@@ -472,6 +472,7 @@ def launch_gradio(
     url_list_str: str,
     model_name: str,
     log_level: str,
+    share_ui: bool,
 ) -> None:
     iface = gr.Interface(
         fn=_run_query,
@@ -511,7 +512,7 @@ def launch_gradio(
         description="Search the web with the query and summarize the results. Source code: https://github.com/pengfeng/ask.py",
     )
 
-    iface.launch()
+    iface.launch(share=share_ui)
 
 
 @click.command(help="Search web for the query and summarize the results")
@@ -586,7 +587,11 @@ def search_extract_summarize(
 ):
     load_dotenv(dotenv_path=default_env_file, override=False)
 
-    if web_ui or os.environ.get("RUN_GRADIO_UI", "False") != "False":
+    if web_ui or os.environ.get("RUN_GRADIO_UI", "false").lower() != "false":
+        if os.environ.get("SHARE_GRADIO_UI", "false").lower() == "true":
+            share_ui = True
+        else:
+            share_ui = False
         launch_gradio(
             query=query,
             date_restrict=date_restrict,
@@ -596,6 +601,7 @@ def search_extract_summarize(
             url_list_str=_read_url_list(url_list_file),
             model_name=model_name,
             log_level=log_level,
+            share_ui=share_ui,
         )
     else:
         if query is None:
