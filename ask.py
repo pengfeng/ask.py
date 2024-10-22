@@ -11,10 +11,8 @@ import duckdb
 import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
-from httpx import get
 from jinja2 import BaseLoader, Environment
 from openai import OpenAI
-from tokenizers import PreTokenizedString
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 default_env_file = os.path.abspath(os.path.join(script_dir, ".env"))
