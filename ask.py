@@ -410,8 +410,6 @@ def _run_query(
 ) -> str:
     logger = get_logger(log_level)
 
-    load_dotenv(dotenv_path=default_env_file, override=False)
-
     ask = Ask(logger=logger)
 
     if url_list_str is None or url_list_str.strip() == "":
@@ -586,7 +584,9 @@ def search_extract_summarize(
     model_name: str,
     log_level: str,
 ):
-    if web_ui:
+    load_dotenv(dotenv_path=default_env_file, override=False)
+
+    if web_ui or os.environ.get("RUN_GRADIO_UI", "False") != "False":
         launch_gradio(
             query=query,
             date_restrict=date_restrict,

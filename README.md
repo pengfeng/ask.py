@@ -5,6 +5,14 @@
 A single Python program to implement the search-extract-summarize flow, similar to AI search
 engines such as Perplexity.
 
+> [!UPDATE]
+>
+> - 2024-10-22: add GradIO integation
+> - 2024-10-21: use DuckDB for the vector search and use API for embedding
+> - 2024-10-20: allow to specify a list of input urls
+> - 2024-10-18: output-language and output-length parameters for LLM
+> - 2024-10-18: date-restrict and target-site parameters for seach
+
 > [!NOTE]
 > Our main goal is to illustrate the basic concepts of AI search engines with the raw constructs.
 > Performance or scalability is not in the scope of this program.
@@ -58,17 +66,17 @@ Usage: ask.py [OPTIONS]
   Search web for the query and summarize the results
 
 Options:
-  -q, --query TEXT                Query to search  [required]
-  --url-list TEXT                 Instead of doing web search, scrape the
-                                  target URL list and answer the query based
-                                  on the content  [default:
-                                  instructions/links.txt]
+  --web-ui                        Launch the web interface
+  -q, --query TEXT                Query to search
   -d, --date-restrict INTEGER     Restrict search results to a specific date
                                   range, default is no restriction
   -s, --target-site TEXT          Restrict search results to a specific site,
                                   default is no restriction
   --output-language TEXT          Output language for the answer
   --output-length INTEGER         Output length for the answer
+  --url-list-file TEXT            Instead of doing web search, scrape the
+                                  target URL list and answer the query based
+                                  on the content
   -m, --model-name TEXT           Model name to use for inference
   -l, --log-level [DEBUG|INFO|WARNING|ERROR]
                                   Set the logging level  [default: INFO]
@@ -81,7 +89,8 @@ Options:
 - [OpenAI API](https://beta.openai.com/docs/api-reference/completions/create)
 - [Jinja2](https://jinja.palletsprojects.com/en/3.0.x/)
 - [bs4](https://www.crummy.com/software/BeautifulSoup/bs4/doc/)
-- [duckdb](https://github.com/duckdb/duckdb)
+- [DuckDB](https://github.com/duckdb/duckdb)
+- [GradIO](https://grad.io)
 
 ## Sample output
 
