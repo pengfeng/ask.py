@@ -203,12 +203,12 @@ CREATE TABLE {self.table_name} (
         self, client: OpenAI, chunk_batch: Tuple[str, List[str]]
     ) -> Tuple[Tuple[str, List[str]], List[List[float]]]:
         """
-        We need to return the chunk_batch as well as the embeddings for each chunk so that
+        Return the chunk_batch as well as the embeddings for each chunk so that
         we can aggregate them and save them to the database together.
 
         Args:
         - client: OpenAI client
-        - chunk_batch: Tuple of URL and list of chunks
+        - chunk_batch: Tuple of URL and list of chunks scraped from the URL
 
         Returns:
         - Tuple of chunk_bach and list of result embeddings
@@ -233,7 +233,7 @@ CREATE TABLE {self.table_name} (
         partial_get_embedding = partial(self.batch_get_embedding, client)
         with ThreadPoolExecutor(max_workers=10) as executor:
             all_embeddings = executor.map(partial_get_embedding, batches)
-        self.logger.info(f"✅ Finshed embedding.")
+        self.logger.info(f"✅ Finished embedding.")
 
         for chunk_batch, embeddings in all_embeddings:
             url = chunk_batch[0]
@@ -246,7 +246,7 @@ CREATE TABLE {self.table_name} (
             )
 
         for i in range(0, len(insert_data), query_batch_size):
-            # Insert the batch into DuckDB
+            # insert the batch into DuckDB
             value_str = ", ".join(
                 [
                     f"('{url}', '{chunk}', {embedding})"
@@ -315,7 +315,7 @@ CREATE TABLE {self.table_name} (
         output_length: int,
     ) -> str:
         system_prompt = (
-            "You are expert summarizing the answers based on the provided contents."
+            "You are an expert summarizing the answers based on the provided contents."
         )
         user_promt_template = """
 Given the context as a sequence of references with a reference id in the 
