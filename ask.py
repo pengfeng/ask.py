@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import click
 import duckdb
+import gradio as gr
 import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
@@ -193,6 +194,9 @@ CREATE TABLE {self.table_name} (
         return chunking_results
 
     def get_embedding(self, client: OpenAI, texts: List[str]) -> List[List[float]]:
+        if len(texts) == 0:
+            return []
+
         response = client.embeddings.create(input=texts, model=self.embedding_model)
         embeddings = []
         for i in range(len(response.data)):
@@ -339,7 +343,7 @@ Here is the context:
         for i, chunk in enumerate(matched_chunks):
             context += f"[{i+1}] {chunk['chunk']}\n"
 
-        if output_length is None:
+        if output_length is None or output_length == 0:
             length_instructions = ""
         else:
             length_instructions = (
@@ -380,90 +384,44 @@ Here is the context:
         return response_str
 
 
-@click.command(help="Search web for the query and summarize the results")
-@click.option("--query", "-q", required=True, help="Query to search")
-@click.option(
-    "--url-list",
-    type=str,
-    required=False,
-    default=None,
-    show_default=True,
-    help="Instead of doing web search, scrape the target URL list and answer the query based on the content",
-)
-@click.option(
-    "--date-restrict",
-    "-d",
-    type=int,
-    required=False,
-    default=None,
-    help="Restrict search results to a specific date range, default is no restriction",
-)
-@click.option(
-    "--target-site",
-    "-s",
-    required=False,
-    default=None,
-    help="Restrict search results to a specific site, default is no restriction",
-)
-@click.option(
-    "--output-language",
-    required=False,
-    default="English",
-    help="Output language for the answer",
-)
-@click.option(
-    "--output-length",
-    type=int,
-    required=False,
-    default=None,
-    help="Output length for the answer",
-)
-@click.option(
-    "--model-name",
-    "-m",
-    required=False,
-    default="gpt-4o-mini",
-    help="Model name to use for inference",
-)
-@click.option(
-    "-l",
-    "--log-level",
-    "log_level",
-    default="INFO",
-    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"], case_sensitive=False),
-    help="Set the logging level",
-    show_default=True,
-)
-def search_extract_summarize(
+def _read_url_list(url_list_file: str) -> str:
+    if url_list_file is None:
+        return None
+
+    with open(url_list_file, "r") as f:
+        links = f.readlines()
+    links = [
+        link.strip()
+        for link in links
+        if link.strip() != "" and not link.startswith("#")
+    ]
+    return "\n".join(links)
+
+
+def _run_query(
     query: str,
-    url_list: str,
     date_restrict: int,
     target_site: str,
     output_language: str,
     output_length: int,
+    url_list_str: str,
     model_name: str,
     log_level: str,
-):
+) -> str:
     logger = get_logger(log_level)
 
     load_dotenv(dotenv_path=default_env_file, override=False)
 
     ask = Ask(logger=logger)
 
-    if url_list is None:
+    if url_list_str is None or url_list_str.strip() == "":
         logger.info("Searching the web ...")
         links = ask.search_web(query, date_restrict, target_site)
         logger.info(f"✅ Found {len(links)} links for query: {query}")
         for i, link in enumerate(links):
             logger.debug(f"{i+1}. {link}")
     else:
-        with open(url_list, "r") as f:
-            links = f.readlines()
-        links = [
-            link.strip()
-            for link in links
-            if link.strip() != "" and not link.startswith("#")
-        ]
+        links = url_list_str.split("\n")
 
     logger.info("Scraping the URLs ...")
     scrape_results = ask.scrape_urls(links)
@@ -500,10 +458,145 @@ def search_extract_summarize(
     logger.info("✅ Finished inference API call.")
     logger.info("generateing output ...")
 
-    click.echo(f"# Answer\n\n{answer}\n")
-    click.echo(f"# References\n")
-    for i, result in enumerate(matched_chunks):
-        click.echo(f"[{i+1}] {result['url']}")
+    answer = f"# Answer\n\n{answer}\n"
+    references = "\n".join(
+        [f"[{i+1}] {result['url']}" for i, result in enumerate(matched_chunks)]
+    )
+    return f"{answer}\n\n# References\n\n{references}"
+
+
+def launch_gradio(
+    query: str,
+    date_restrict: int,
+    target_site: str,
+    output_language: str,
+    output_length: int,
+    url_list_str: str,
+    model_name: str,
+    log_level: str,
+) -> None:
+    iface = gr.Interface(
+        fn=_run_query,
+        inputs=[
+            gr.Textbox(label="Query", value=query),
+            gr.Number(label="Date Restrict (Optional)", value=date_restrict),
+            gr.Textbox(label="Target Sites (Optional)", value=target_site),
+            gr.Textbox(label="Output Language (Optional)", value=output_language),
+            gr.Number(label="Output Length in words (Optional)", value=output_length),
+            gr.Textbox(
+                label="URL List (Optional)", lines=5, max_lines=20, value=url_list_str
+            ),
+        ],
+        additional_inputs=[
+            gr.Textbox(label="Model Name", value=model_name),
+            gr.Textbox(label="Log Level", value=log_level),
+        ],
+        outputs="text",
+        show_progress=True,
+        flagging_options=[("Report Error", None)],
+        title="Ask.py - Web Search-Extract-Summarize",
+        description="Search the web with the query and summarize the results.",
+    )
+
+    iface.launch()
+
+
+@click.command(help="Search web for the query and summarize the results")
+@click.option(
+    "--web-ui",
+    is_flag=True,
+    help="Launch the web interface",
+)
+@click.option("--query", "-q", required=False, help="Query to search")
+@click.option(
+    "--date-restrict",
+    "-d",
+    type=int,
+    required=False,
+    default=None,
+    help="Restrict search results to a specific date range, default is no restriction",
+)
+@click.option(
+    "--target-site",
+    "-s",
+    required=False,
+    default=None,
+    help="Restrict search results to a specific site, default is no restriction",
+)
+@click.option(
+    "--output-language",
+    required=False,
+    default="English",
+    help="Output language for the answer",
+)
+@click.option(
+    "--output-length",
+    type=int,
+    required=False,
+    default=None,
+    help="Output length for the answer",
+)
+@click.option(
+    "--url-list-file",
+    type=str,
+    required=False,
+    default=None,
+    show_default=True,
+    help="Instead of doing web search, scrape the target URL list and answer the query based on the content",
+)
+@click.option(
+    "--model-name",
+    "-m",
+    required=False,
+    default="gpt-4o-mini",
+    help="Model name to use for inference",
+)
+@click.option(
+    "-l",
+    "--log-level",
+    "log_level",
+    default="INFO",
+    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"], case_sensitive=False),
+    help="Set the logging level",
+    show_default=True,
+)
+def search_extract_summarize(
+    web_ui: bool,
+    query: str,
+    date_restrict: int,
+    target_site: str,
+    output_language: str,
+    output_length: int,
+    url_list_file: str,
+    model_name: str,
+    log_level: str,
+):
+    if web_ui:
+        launch_gradio(
+            query=query,
+            date_restrict=date_restrict,
+            target_site=target_site,
+            output_language=output_language,
+            output_length=output_length,
+            url_list_str=_read_url_list(url_list_file),
+            model_name=model_name,
+            log_level=log_level,
+        )
+    else:
+        if query is None:
+            raise Exception("Query is required for the command line mode")
+
+        result = _run_query(
+            query=query,
+            date_restrict=date_restrict,
+            target_site=target_site,
+            output_language=output_language,
+            output_length=output_length,
+            url_list_str=_read_url_list(url_list_file),
+            model_name=model_name,
+            log_level=log_level,
+        )
+        click.echo(result)
 
 
 if __name__ == "__main__":
