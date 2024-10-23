@@ -44,7 +44,7 @@ For example, we can:
 ## Quick start
 
 ```bash
-
+# recommend to use Python 3.10 or later and use venv or conda to create a virtual environment
 pip install -r requirements.txt
 
 # modify .env file to set the API keys or export them as environment variables as below
@@ -63,10 +63,9 @@ python ask.py -q "What is an LLM agent?"
 python ask.py --help
 Usage: ask.py [OPTIONS]
 
-  Search web for the query and summarize the results
+  Search web for the query and summarize the results.
 
 Options:
-  --web-ui                        Launch the web interface
   -q, --query TEXT                Query to search
   -d, --date-restrict INTEGER     Restrict search results to a specific date
                                   range, default is no restriction
@@ -78,6 +77,7 @@ Options:
                                   target URL list and answer the query based
                                   on the content
   -m, --model-name TEXT           Model name to use for inference
+  --web-ui                        Launch the web interface
   -l, --log-level [DEBUG|INFO|WARNING|ERROR]
                                   Set the logging level  [default: INFO]
   --help                          Show this message and exit.

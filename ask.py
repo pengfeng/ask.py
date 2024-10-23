@@ -3,6 +3,7 @@ import logging
 import os
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 from functools import partial
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -19,14 +20,30 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 default_env_file = os.path.abspath(os.path.join(script_dir, ".env"))
 
 
-def get_logger(log_level: str) -> logging.Logger:
+def _get_logger(log_level: str) -> logging.Logger:
     logger = logging.getLogger(__name__)
     logger.setLevel(log_level)
+    if len(logger.handlers) > 0:
+        return logger
     handler = logging.StreamHandler()
     formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
     handler.setFormatter(formatter)
     logger.addHandler(handler)
     return logger
+
+
+def _read_url_list(url_list_file: str) -> str:
+    if url_list_file is None:
+        return None
+
+    with open(url_list_file, "r") as f:
+        links = f.readlines()
+    links = [
+        link.strip()
+        for link in links
+        if link.strip() != "" and not link.startswith("#")
+    ]
+    return "\n".join(links)
 
 
 class Ask:
@@ -37,9 +54,8 @@ class Ask:
         if logger is not None:
             self.logger = logger
         else:
-            self.logger = get_logger("INFO")
+            self.logger = _get_logger("INFO")
 
-        self.table_name = "document_chunks"
         self.db_con = duckdb.connect(":memory:")
 
         self.db_con.install_extension("vss")
@@ -47,17 +63,6 @@ class Ask:
         self.db_con.install_extension("fts")
         self.db_con.load_extension("fts")
         self.db_con.sql("CREATE SEQUENCE seq_docid START 1000")
-
-        self.db_con.execute(
-            f"""
-CREATE TABLE {self.table_name} (
-    doc_id INTEGER PRIMARY KEY DEFAULT nextval('seq_docid'),
-    url TEXT,
-    chunk TEXT,
-    vec FLOAT[{self.embedding_dimensions}]
-);
-"""
-        )
 
         self.session = requests.Session()
         user_agent: str = (
@@ -221,11 +226,30 @@ CREATE TABLE {self.table_name} (
         embeddings = self.get_embedding(client, texts)
         return chunk_batch, embeddings
 
-    def save_to_db(self, chunking_results: Dict[str, List[str]]) -> None:
+    def _create_table(self) -> str:
+        # Simple ways to get a unique table name
+        timestamp = datetime.now().strftime("%Y_%m_%d_%H_%M_%S_%f")
+        table_name = f"document_chunks_{timestamp}"
+
+        self.db_con.execute(
+            f"""
+CREATE TABLE {table_name} (
+    doc_id INTEGER PRIMARY KEY DEFAULT nextval('seq_docid'),
+    url TEXT,
+    chunk TEXT,
+    vec FLOAT[{self.embedding_dimensions}]
+);
+"""
+        )
+        return table_name
+
+    def save_to_db(self, chunking_results: Dict[str, List[str]]) -> str:
         client = self._get_api_client()
         embed_batch_size = 50
         query_batch_size = 100
         insert_data = []
+
+        table_name = self._create_table()
 
         batches: List[Tuple[str, List[str]]] = []
         for url, list_chunks in chunking_results.items():
@@ -258,13 +282,13 @@ CREATE TABLE {self.table_name} (
                 ]
             )
             query = f"""
-            INSERT INTO {self.table_name} (url, chunk, vec) VALUES {value_str};
+            INSERT INTO {table_name} (url, chunk, vec) VALUES {value_str};
             """
             self.db_con.execute(query)
 
         self.db_con.execute(
             f"""
-                CREATE INDEX cos_idx ON {self.table_name} USING HNSW (vec)
+                CREATE INDEX {table_name}_cos_idx ON {table_name} USING HNSW (vec)
                 WITH (metric = 'cosine');
             """
         )
@@ -272,19 +296,20 @@ CREATE TABLE {self.table_name} (
         self.db_con.execute(
             f"""
                 PRAGMA create_fts_index(
-                {self.table_name}, 'doc_id', 'chunk'
+                {table_name}, 'doc_id', 'chunk'
                 );    
             """
         )
         self.logger.info(f"✅ Created the full text search index ...")
+        return table_name
 
-    def vector_search(self, query: str) -> List[Dict[str, Any]]:
+    def vector_search(self, table_name: str, query: str) -> List[Dict[str, Any]]:
         client = self._get_api_client()
         embeddings = self.get_embedding(client, [query])[0]
 
         query_result: duckdb.DuckDBPyRelation = self.db_con.sql(
             f"""
-            SELECT * FROM {self.table_name} 
+            SELECT * FROM {table_name} 
             ORDER BY array_distance(vec, {embeddings}::FLOAT[{self.embedding_dimensions}]) 
             LIMIT 10;         
         """
@@ -383,84 +408,66 @@ Here is the context:
         response_str = completion.choices[0].message.content
         return response_str
 
+    def run_query(
+        self,
+        query: str,
+        date_restrict: int,
+        target_site: str,
+        output_language: str,
+        output_length: int,
+        url_list_str: str,
+        model_name: str,
+    ) -> str:
+        logger = self.logger
+        if url_list_str is None or url_list_str.strip() == "":
+            logger.info("Searching the web ...")
+            links = self.search_web(query, date_restrict, target_site)
+            logger.info(f"✅ Found {len(links)} links for query: {query}")
+            for i, link in enumerate(links):
+                logger.debug(f"{i+1}. {link}")
+        else:
+            links = url_list_str.split("\n")
 
-def _read_url_list(url_list_file: str) -> str:
-    if url_list_file is None:
-        return None
+        logger.info("Scraping the URLs ...")
+        scrape_results = self.scrape_urls(links)
+        logger.info(f"✅ Scraped {len(scrape_results)} URLs.")
 
-    with open(url_list_file, "r") as f:
-        links = f.readlines()
-    links = [
-        link.strip()
-        for link in links
-        if link.strip() != "" and not link.startswith("#")
-    ]
-    return "\n".join(links)
+        logger.info("Chunking the text ...")
+        chunking_results = self.chunk_results(scrape_results, 1000, 100)
+        total_chunks = 0
+        for url, chunks in chunking_results.items():
+            logger.debug(f"URL: {url}")
+            total_chunks += len(chunks)
+            for i, chunk in enumerate(chunks):
+                logger.debug(f"Chunk {i+1}: {chunk}")
+        logger.info(f"✅ Generated {total_chunks} chunks ...")
 
+        logger.info(f"Saving {total_chunks} chunks to DB ...")
+        table_name = self.save_to_db(chunking_results)
+        logger.info(f"✅ Successfully embedded and saved chunks to DB.")
 
-def _run_query(
-    query: str,
-    date_restrict: int,
-    target_site: str,
-    output_language: str,
-    output_length: int,
-    url_list_str: str,
-    model_name: str,
-    log_level: str,
-) -> str:
-    logger = get_logger(log_level)
+        logger.info("Querying the vector DB to get context ...")
+        matched_chunks = self.vector_search(table_name, query)
+        for i, result in enumerate(matched_chunks):
+            logger.debug(f"{i+1}. {result}")
+        logger.info(f"✅ Got {len(matched_chunks)} matched chunks.")
 
-    ask = Ask(logger=logger)
+        logger.info("Running inference with context ...")
+        answer = self.run_inference(
+            query=query,
+            model_name=model_name,
+            matched_chunks=matched_chunks,
+            output_language=output_language,
+            output_length=output_length,
+        )
+        logger.info("✅ Finished inference API call.")
+        logger.info("Generating output ...")
 
-    if url_list_str is None or url_list_str.strip() == "":
-        logger.info("Searching the web ...")
-        links = ask.search_web(query, date_restrict, target_site)
-        logger.info(f"✅ Found {len(links)} links for query: {query}")
-        for i, link in enumerate(links):
-            logger.debug(f"{i+1}. {link}")
-    else:
-        links = url_list_str.split("\n")
-
-    logger.info("Scraping the URLs ...")
-    scrape_results = ask.scrape_urls(links)
-    logger.info(f"✅ Scraped {len(scrape_results)} URLs.")
-
-    logger.info("Chunking the text ...")
-    chunking_results = ask.chunk_results(scrape_results, 1000, 100)
-    total_chunks = 0
-    for url, chunks in chunking_results.items():
-        logger.debug(f"URL: {url}")
-        total_chunks += len(chunks)
-        for i, chunk in enumerate(chunks):
-            logger.debug(f"Chunk {i+1}: {chunk}")
-    logger.info(f"✅ Generated {total_chunks} chunks ...")
-
-    logger.info(f"Saving {total_chunks} chunks to DB ...")
-    ask.save_to_db(chunking_results)
-    logger.info(f"✅ Successfully embedded and saved chunks to DB.")
-
-    logger.info("Querying the vector DB to get context ...")
-    matched_chunks = ask.vector_search(query)
-    for i, result in enumerate(matched_chunks):
-        logger.debug(f"{i+1}. {result}")
-    logger.info(f"✅ Got {len(matched_chunks)} matched chunks.")
-
-    logger.info("Running inference with context ...")
-    answer = ask.run_inference(
-        query=query,
-        model_name=model_name,
-        matched_chunks=matched_chunks,
-        output_language=output_language,
-        output_length=output_length,
-    )
-    logger.info("✅ Finished inference API call.")
-    logger.info("generateing output ...")
-
-    answer = f"# Answer\n\n{answer}\n"
-    references = "\n".join(
-        [f"[{i+1}] {result['url']}" for i, result in enumerate(matched_chunks)]
-    )
-    return f"{answer}\n\n# References\n\n{references}"
+        answer = f"# Answer\n\n{answer}\n"
+        references = "\n".join(
+            [f"[{i+1}] {result['url']}" for i, result in enumerate(matched_chunks)]
+        )
+        return f"{answer}\n\n# References\n\n{references}"
 
 
 def launch_gradio(
@@ -471,11 +478,12 @@ def launch_gradio(
     output_length: int,
     url_list_str: str,
     model_name: str,
-    log_level: str,
     share_ui: bool,
+    logger: logging.Logger,
 ) -> None:
+    ask = Ask(logger=logger)
     iface = gr.Interface(
-        fn=_run_query,
+        fn=ask.run_query,
         inputs=[
             gr.Textbox(label="Query", value=query),
             gr.Number(
@@ -483,7 +491,7 @@ def launch_gradio(
                 value=date_restrict,
             ),
             gr.Textbox(
-                label="Target Sites (Optional) [Empty means seach the whole web.]",
+                label="Target Sites (Optional) [Empty means search the whole web.]",
                 value=target_site,
             ),
             gr.Textbox(
@@ -503,7 +511,6 @@ def launch_gradio(
         ],
         additional_inputs=[
             gr.Textbox(label="Model Name", value=model_name),
-            gr.Textbox(label="Log Level", value=log_level),
         ],
         outputs="text",
         show_progress=True,
@@ -515,12 +522,7 @@ def launch_gradio(
     iface.launch(share=share_ui)
 
 
-@click.command(help="Search web for the query and summarize the results")
-@click.option(
-    "--web-ui",
-    is_flag=True,
-    help="Launch the web interface",
-)
+@click.command(help="Search web for the query and summarize the results.")
 @click.option("--query", "-q", required=False, help="Query to search")
 @click.option(
     "--date-restrict",
@@ -566,6 +568,11 @@ def launch_gradio(
     help="Model name to use for inference",
 )
 @click.option(
+    "--web-ui",
+    is_flag=True,
+    help="Launch the web interface",
+)
+@click.option(
     "-l",
     "--log-level",
     "log_level",
@@ -575,7 +582,6 @@ def launch_gradio(
     show_default=True,
 )
 def search_extract_summarize(
-    web_ui: bool,
     query: str,
     date_restrict: int,
     target_site: str,
@@ -583,9 +589,11 @@ def search_extract_summarize(
     output_length: int,
     url_list_file: str,
     model_name: str,
+    web_ui: bool,
     log_level: str,
 ):
     load_dotenv(dotenv_path=default_env_file, override=False)
+    logger = _get_logger(log_level)
 
     if web_ui or os.environ.get("RUN_GRADIO_UI", "false").lower() != "false":
         if os.environ.get("SHARE_GRADIO_UI", "false").lower() == "true":
@@ -600,14 +608,14 @@ def search_extract_summarize(
             output_length=output_length,
             url_list_str=_read_url_list(url_list_file),
             model_name=model_name,
-            log_level=log_level,
             share_ui=share_ui,
+            logger=logger,
         )
     else:
         if query is None:
             raise Exception("Query is required for the command line mode")
-
-        result = _run_query(
+        ask = Ask(logger=logger)
+        result = ask.run_query(
             query=query,
             date_restrict=date_restrict,
             target_site=target_site,
@@ -615,7 +623,6 @@ def search_extract_summarize(
             output_length=output_length,
             url_list_str=_read_url_list(url_list_file),
             model_name=model_name,
-            log_level=log_level,
         )
         click.echo(result)
 
