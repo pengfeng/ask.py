@@ -1,11 +1,14 @@
 import json
 import logging
 import os
+import queue
+import re
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from functools import partial
-from typing import Any, Dict, List, Optional, Tuple
+from queue import Queue
+from typing import Any, Dict, Generator, List, Optional, Tuple
 
 import click
 import duckdb
@@ -15,6 +18,7 @@ from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from jinja2 import BaseLoader, Environment
 from openai import OpenAI
+from regex import T
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 default_env_file = os.path.abspath(os.path.join(script_dir, ".env"))
@@ -25,6 +29,7 @@ def _get_logger(log_level: str) -> logging.Logger:
     logger.setLevel(log_level)
     if len(logger.handlers) > 0:
         return logger
+
     handler = logging.StreamHandler()
     formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
     handler.setFormatter(formatter)
@@ -417,57 +422,99 @@ Here is the context:
         output_length: int,
         url_list_str: str,
         model_name: str,
-    ) -> str:
+    ) -> Generator[Tuple[str, str], None, Tuple[str, str]]:
         logger = self.logger
-        if url_list_str is None or url_list_str.strip() == "":
-            logger.info("Searching the web ...")
-            links = self.search_web(query, date_restrict, target_site)
-            logger.info(f"✅ Found {len(links)} links for query: {query}")
-            for i, link in enumerate(links):
-                logger.debug(f"{i+1}. {link}")
-        else:
-            links = url_list_str.split("\n")
+        log_queue = Queue()
 
-        logger.info("Scraping the URLs ...")
-        scrape_results = self.scrape_urls(links)
-        logger.info(f"✅ Scraped {len(scrape_results)} URLs.")
+        queue_handler = logging.Handler()
+        formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+        queue_handler.emit = lambda record: log_queue.put(formatter.format(record))
+        logger.addHandler(queue_handler)
 
-        logger.info("Chunking the text ...")
-        chunking_results = self.chunk_results(scrape_results, 1000, 100)
-        total_chunks = 0
-        for url, chunks in chunking_results.items():
-            logger.debug(f"URL: {url}")
-            total_chunks += len(chunks)
-            for i, chunk in enumerate(chunks):
-                logger.debug(f"Chunk {i+1}: {chunk}")
-        logger.info(f"✅ Generated {total_chunks} chunks ...")
+        def update_logs():
+            logs = []
+            while True:
+                try:
+                    log = log_queue.get_nowait()
+                    logs.append(log)
+                except queue.Empty:
+                    break
+            return "\n".join(logs)
 
-        logger.info(f"Saving {total_chunks} chunks to DB ...")
-        table_name = self.save_to_db(chunking_results)
-        logger.info(f"✅ Successfully embedded and saved chunks to DB.")
+        def process_with_logs():
+            if url_list_str is None or url_list_str.strip() == "":
+                logger.info("Searching the web ...")
+                yield "", update_logs()
+                links = self.search_web(query, date_restrict, target_site)
+                logger.info(f"✅ Found {len(links)} links for query: {query}")
+                for i, link in enumerate(links):
+                    logger.debug(f"{i+1}. {link}")
+                yield "", update_logs()
+            else:
+                links = url_list_str.split("\n")
 
-        logger.info("Querying the vector DB to get context ...")
-        matched_chunks = self.vector_search(table_name, query)
-        for i, result in enumerate(matched_chunks):
-            logger.debug(f"{i+1}. {result}")
-        logger.info(f"✅ Got {len(matched_chunks)} matched chunks.")
+            logger.info("Scraping the URLs ...")
+            yield "", update_logs()
+            scrape_results = self.scrape_urls(links)
+            logger.info(f"✅ Scraped {len(scrape_results)} URLs.")
+            yield "", update_logs()
 
-        logger.info("Running inference with context ...")
-        answer = self.run_inference(
-            query=query,
-            model_name=model_name,
-            matched_chunks=matched_chunks,
-            output_language=output_language,
-            output_length=output_length,
-        )
-        logger.info("✅ Finished inference API call.")
-        logger.info("Generating output ...")
+            logger.info("Chunking the text ...")
+            yield "", update_logs()
+            chunking_results = self.chunk_results(scrape_results, 1000, 100)
+            total_chunks = 0
+            for url, chunks in chunking_results.items():
+                logger.debug(f"URL: {url}")
+                total_chunks += len(chunks)
+                for i, chunk in enumerate(chunks):
+                    logger.debug(f"Chunk {i+1}: {chunk}")
+            logger.info(f"✅ Generated {total_chunks} chunks ...")
+            yield "", update_logs()
 
-        answer = f"# Answer\n\n{answer}\n"
-        references = "\n".join(
-            [f"[{i+1}] {result['url']}" for i, result in enumerate(matched_chunks)]
-        )
-        return f"{answer}\n\n# References\n\n{references}"
+            logger.info(f"Saving {total_chunks} chunks to DB ...")
+            yield "", update_logs()
+            table_name = self.save_to_db(chunking_results)
+            logger.info(f"✅ Successfully embedded and saved chunks to DB.")
+            yield "", update_logs()
+
+            logger.info("Querying the vector DB to get context ...")
+            matched_chunks = self.vector_search(table_name, query)
+            for i, result in enumerate(matched_chunks):
+                logger.debug(f"{i+1}. {result}")
+            logger.info(f"✅ Got {len(matched_chunks)} matched chunks.")
+            yield "", update_logs()
+
+            logger.info("Running inference with context ...")
+            yield "", update_logs()
+            answer = self.run_inference(
+                query=query,
+                model_name=model_name,
+                matched_chunks=matched_chunks,
+                output_language=output_language,
+                output_length=output_length,
+            )
+            logger.info("✅ Finished inference API call.")
+            logger.info("Generating output ...")
+            yield "", update_logs()
+
+            answer = f"# Answer\n\n{answer}\n"
+            references = "\n".join(
+                [f"[{i+1}] {result['url']}" for i, result in enumerate(matched_chunks)]
+            )
+            yield f"{answer}\n\n# References\n\n{references}", update_logs()
+
+        logs = ""
+        final_result = ""
+
+        try:
+            for result, log_update in process_with_logs():
+                logs += log_update + "\n"
+                final_result = result
+                yield final_result, logs
+        finally:
+            logger.removeHandler(queue_handler)
+
+        return final_result, logs
 
 
 def launch_gradio(
@@ -482,44 +529,63 @@ def launch_gradio(
     logger: logging.Logger,
 ) -> None:
     ask = Ask(logger=logger)
-    iface = gr.Interface(
-        fn=ask.run_query,
-        inputs=[
-            gr.Textbox(label="Query", value=query),
-            gr.Number(
-                label="Date Restrict (Optional) [0 or empty means no date limit.]",
-                value=date_restrict,
-            ),
-            gr.Textbox(
-                label="Target Sites (Optional) [Empty means search the whole web.]",
-                value=target_site,
-            ),
-            gr.Textbox(
-                label="Output Language (Optional) [Default is English.]",
-                value=output_language,
-            ),
-            gr.Number(
-                label="Output Length in words (Optional) [Default is automatically decided by LLM.]",
-                value=output_length,
-            ),
-            gr.Textbox(
-                label="URL List (Optional) [When specified, scrape the urls instead of searching the web.]",
-                lines=5,
-                max_lines=20,
-                value=url_list_str,
-            ),
-        ],
-        additional_inputs=[
-            gr.Textbox(label="Model Name", value=model_name),
-        ],
-        outputs="text",
-        show_progress=True,
-        flagging_options=[("Report Error", None)],
-        title="Ask.py - Web Search-Extract-Summarize",
-        description="Search the web with the query and summarize the results. Source code: https://github.com/pengfeng/ask.py",
-    )
+    with gr.Blocks() as demo:
+        gr.Markdown("# Ask.py - Web Search-Extract-Summarize")
+        gr.Markdown(
+            "Search the web with the query and summarize the results. Source code: https://github.com/pengfeng/ask.py"
+        )
 
-    iface.launch(share=share_ui)
+        with gr.Row():
+            with gr.Column():
+
+                query_input = gr.Textbox(label="Query", value=query)
+                date_restrict_input = gr.Number(
+                    label="Date Restrict (Optional) [0 or empty means no date limit.]",
+                    value=date_restrict,
+                )
+                target_site_input = gr.Textbox(
+                    label="Target Sites (Optional) [Empty means searching the whole web.]",
+                    value=target_site,
+                )
+                output_language_input = gr.Textbox(
+                    label="Output Language (Optional) [Default is English.]",
+                    value=output_language,
+                )
+                output_length_input = gr.Number(
+                    label="Output Length in words (Optional) [Default is automatically decided by LLM.]",
+                    value=output_length,
+                )
+                url_list_input = gr.Textbox(
+                    label="URL List (Optional) [When specified, scrape the urls instead of searching the web.]",
+                    lines=5,
+                    max_lines=20,
+                    value=url_list_str,
+                )
+
+                with gr.Accordion("More Options", open=False):
+                    model_name_input = gr.Textbox(label="Model Name", value=model_name)
+
+                submit_button = gr.Button("Submit")
+
+            with gr.Column():
+                answer_output = gr.Textbox(label="Answer")
+                logs_output = gr.Textbox(label="Logs", lines=10)
+
+        submit_button.click(
+            fn=ask.run_query,
+            inputs=[
+                query_input,
+                date_restrict_input,
+                target_site_input,
+                output_language_input,
+                output_length_input,
+                url_list_input,
+                model_name_input,
+            ],
+            outputs=[answer_output, logs_output],
+        )
+
+    demo.queue().launch(share=share_ui)
 
 
 @click.command(help="Search web for the query and summarize the results.")
@@ -615,7 +681,8 @@ def search_extract_summarize(
         if query is None:
             raise Exception("Query is required for the command line mode")
         ask = Ask(logger=logger)
-        result = ask.run_query(
+
+        for result, _ in ask.run_query(
             query=query,
             date_restrict=date_restrict,
             target_site=target_site,
@@ -623,8 +690,10 @@ def search_extract_summarize(
             output_length=output_length,
             url_list_str=_read_url_list(url_list_file),
             model_name=model_name,
-        )
-        click.echo(result)
+        ):
+            final_result = result
+
+        click.echo(final_result)
 
 
 if __name__ == "__main__":
