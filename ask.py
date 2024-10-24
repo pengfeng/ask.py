@@ -2,7 +2,6 @@ import json
 import logging
 import os
 import queue
-import re
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
@@ -18,7 +17,6 @@ from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from jinja2 import BaseLoader, Environment
 from openai import OpenAI
-from regex import T
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 default_env_file = os.path.abspath(os.path.join(script_dir, ".env"))
