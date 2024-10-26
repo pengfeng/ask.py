@@ -7,7 +7,6 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from functools import partial
 from queue import Queue
-from re import escape
 from typing import Any, Dict, Generator, List, Optional, Tuple
 
 import click
