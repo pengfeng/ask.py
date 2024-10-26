@@ -17,9 +17,20 @@ from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from jinja2 import BaseLoader, Environment
 from openai import OpenAI
+from pydantic import BaseModel
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 default_env_file = os.path.abspath(os.path.join(script_dir, ".env"))
+
+
+class AskSettings(BaseModel):
+    date_restrict: int
+    target_site: str
+    output_language: str
+    output_length: int
+    url_list: List[str]
+    inference_model_name: str
+    hybrid_search: bool
 
 
 def _get_logger(log_level: str) -> logging.Logger:
@@ -35,18 +46,18 @@ def _get_logger(log_level: str) -> logging.Logger:
     return logger
 
 
-def _read_url_list(url_list_file: str) -> str:
-    if url_list_file is None:
-        return None
+def _read_url_list(url_list_file: str) -> List[str]:
+    if not url_list_file:
+        return []
 
     with open(url_list_file, "r") as f:
         links = f.readlines()
-    links = [
+    url_list = [
         link.strip()
         for link in links
         if link.strip() != "" and not link.startswith("#")
     ]
-    return "\n".join(links)
+    return url_list
 
 
 class Ask:
@@ -102,17 +113,17 @@ class Ask:
             self.embedding_model = "text-embedding-3-small"
             self.embedding_dimensions = 1536
 
-    def search_web(self, query: str, date_restrict: int, target_site: str) -> List[str]:
+    def search_web(self, query: str, settings: AskSettings) -> List[str]:
         escaped_query = urllib.parse.quote(query)
         url_base = (
             f"https://www.googleapis.com/customsearch/v1?key={self.search_api_key}"
             f"&cx={self.search_project_id}&q={escaped_query}"
         )
         url_paras = f"&safe=active"
-        if date_restrict is not None and date_restrict > 0:
-            url_paras += f"&dateRestrict={date_restrict}"
-        if target_site is not None and target_site != "":
-            url_paras += f"&siteSearch={target_site}&siteSearchFilter=i"
+        if settings.date_restrict > 0:
+            url_paras += f"&dateRestrict={settings.date_restrict}"
+        if settings.target_site:
+            url_paras += f"&siteSearch={settings.target_site}&siteSearchFilter=i"
         url = f"{url_base}{url_paras}"
 
         self.logger.debug(f"Searching for query: {query}")
@@ -153,6 +164,7 @@ class Ask:
         return found_links
 
     def _scape_url(self, url: str) -> Tuple[str, str]:
+        self.logger.info(f"Scraping {url} ...")
         try:
             response = self.session.get(url, timeout=10)
             soup = BeautifulSoup(response.content, "lxml", from_encoding="utf-8")
@@ -163,6 +175,9 @@ class Ask:
                 body_text = " ".join(body_text.split()).strip()
                 self.logger.debug(f"Scraped {url}: {body_text}...")
                 if len(body_text) > 100:
+                    self.logger.info(
+                        f"✅ Successfully scraped {url} with length: {len(body_text)}"
+                    )
                     return url, body_text
                 else:
                     self.logger.warning(
@@ -246,7 +261,10 @@ CREATE TABLE {table_name} (
         )
         return table_name
 
-    def save_to_db(self, chunking_results: Dict[str, List[str]]) -> str:
+    def save_chunks_to_db(self, chunking_results: Dict[str, List[str]]) -> str:
+        """
+        The key of chunking_results is the URL and the value is the list of chunks.
+        """
         client = self._get_api_client()
         embed_batch_size = 50
         query_batch_size = 100
@@ -266,6 +284,9 @@ CREATE TABLE {table_name} (
             all_embeddings = executor.map(partial_get_embedding, batches)
         self.logger.info(f"✅ Finished embedding.")
 
+        # we batch the insert data to speed up the insertion operation
+        # although the DuckDB doc says executeMany is optimized for batch insert
+        # but we found that it is faster to batch the insert data and run a single insert
         for chunk_batch, embeddings in all_embeddings:
             url = chunk_batch[0]
             list_chunks = chunk_batch[1]
@@ -277,7 +298,6 @@ CREATE TABLE {table_name} (
             )
 
         for i in range(0, len(insert_data), query_batch_size):
-            # insert the batch into DuckDB
             value_str = ", ".join(
                 [
                     f"('{url}', '{chunk}', {embedding})"
@@ -306,7 +326,13 @@ CREATE TABLE {table_name} (
         self.logger.info(f"✅ Created the full text search index ...")
         return table_name
 
-    def vector_search(self, table_name: str, query: str) -> List[Dict[str, Any]]:
+    def vector_search(
+        self, table_name: str, query: str, settings: AskSettings
+    ) -> List[Dict[str, Any]]:
+        """
+        The return value is a list of {url: str, chunk: str} records.
+        In a real world, we will define a class of Chunk to have more metadata such as offsets.
+        """
         client = self._get_api_client()
         embeddings = self.get_embedding(client, [query])[0]
 
@@ -328,6 +354,10 @@ CREATE TABLE {table_name} (
             }
             matched_chunks.append(result_record)
 
+        if settings.hybrid_search:
+            self.logger.info("Running full-text search ...")
+            pass
+
         return matched_chunks
 
     def _get_api_client(self) -> OpenAI:
@@ -341,10 +371,8 @@ CREATE TABLE {table_name} (
     def run_inference(
         self,
         query: str,
-        model_name: str,
         matched_chunks: List[Dict[str, Any]],
-        output_language: str,
-        output_length: int,
+        settings: AskSettings,
     ) -> str:
         system_prompt = (
             "You are an expert summarizing the answers based on the provided contents."
@@ -371,11 +399,11 @@ Here is the context:
         for i, chunk in enumerate(matched_chunks):
             context += f"[{i+1}] {chunk['chunk']}\n"
 
-        if output_length is None or output_length == 0:
+        if not settings.output_length:
             length_instructions = ""
         else:
             length_instructions = (
-                f"Please provide the answer in { output_length } words."
+                f"Please provide the answer in { settings.output_length } words."
             )
 
         user_prompt = self._render_template(
@@ -383,17 +411,19 @@ Here is the context:
             {
                 "query": query,
                 "context": context,
-                "language": output_language,
+                "language": settings.output_language,
                 "length_instructions": length_instructions,
             },
         )
 
-        self.logger.debug(f"Running inference with model: {model_name}")
+        self.logger.debug(
+            f"Running inference with model: {settings.inference_model_name}"
+        )
         self.logger.debug(f"Final user prompt: {user_prompt}")
 
         api_client = self._get_api_client()
         completion = api_client.chat.completions.create(
-            model=model_name,
+            model=settings.inference_model_name,
             messages=[
                 {
                     "role": "system",
@@ -411,7 +441,7 @@ Here is the context:
         response_str = completion.choices[0].message.content
         return response_str
 
-    def run_query(
+    def run_query_gradio(
         self,
         query: str,
         date_restrict: int,
@@ -419,10 +449,26 @@ Here is the context:
         output_language: str,
         output_length: int,
         url_list_str: str,
-        model_name: str,
+        inference_model_name: str,
+        hybrid_search: bool,
     ) -> Generator[Tuple[str, str], None, Tuple[str, str]]:
         logger = self.logger
         log_queue = Queue()
+
+        if url_list_str:
+            url_list = url_list_str.split("\n")
+        else:
+            url_list = []
+
+        settings = AskSettings(
+            date_restrict=date_restrict,
+            target_site=target_site,
+            output_language=output_language,
+            output_length=output_length,
+            url_list=url_list,
+            inference_model_name=inference_model_name,
+            hybrid_search=hybrid_search,
+        )
 
         queue_handler = logging.Handler()
         formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
@@ -439,17 +485,18 @@ Here is the context:
                     break
             return "\n".join(logs)
 
+        # wrap the process in a generator to yield the logs to integrate with GradIO
         def process_with_logs():
-            if url_list_str is None or url_list_str.strip() == "":
+            if len(settings.url_list) > 0:
+                links = settings.url_list
+            else:
                 logger.info("Searching the web ...")
                 yield "", update_logs()
-                links = self.search_web(query, date_restrict, target_site)
+                links = self.search_web(query, settings)
                 logger.info(f"✅ Found {len(links)} links for query: {query}")
                 for i, link in enumerate(links):
                     logger.debug(f"{i+1}. {link}")
                 yield "", update_logs()
-            else:
-                links = url_list_str.split("\n")
 
             logger.info("Scraping the URLs ...")
             yield "", update_logs()
@@ -471,12 +518,12 @@ Here is the context:
 
             logger.info(f"Saving {total_chunks} chunks to DB ...")
             yield "", update_logs()
-            table_name = self.save_to_db(chunking_results)
+            table_name = self.save_chunks_to_db(chunking_results)
             logger.info(f"✅ Successfully embedded and saved chunks to DB.")
             yield "", update_logs()
 
             logger.info("Querying the vector DB to get context ...")
-            matched_chunks = self.vector_search(table_name, query)
+            matched_chunks = self.vector_search(table_name, query, settings)
             for i, result in enumerate(matched_chunks):
                 logger.debug(f"{i+1}. {result}")
             logger.info(f"✅ Got {len(matched_chunks)} matched chunks.")
@@ -486,10 +533,8 @@ Here is the context:
             yield "", update_logs()
             answer = self.run_inference(
                 query=query,
-                model_name=model_name,
                 matched_chunks=matched_chunks,
-                output_language=output_language,
-                output_length=output_length,
+                settings=settings,
             )
             logger.info("✅ Finished inference API call.")
             logger.info("Generating output ...")
@@ -514,15 +559,30 @@ Here is the context:
 
         return final_result, logs
 
+    def run_query(
+        self,
+        query: str,
+        settings: AskSettings,
+    ) -> str:
+        url_list_str = "\n".join(settings.url_list)
+
+        for result, logs in self.run_query_gradio(
+            query=query,
+            date_restrict=settings.date_restrict,
+            target_site=settings.target_site,
+            output_language=settings.output_language,
+            output_length=settings.output_length,
+            url_list_str=url_list_str,
+            inference_model_name=settings.inference_model_name,
+            hybrid_search=settings.hybrid_search,
+        ):
+            final_result = result
+        return final_result
+
 
 def launch_gradio(
     query: str,
-    date_restrict: int,
-    target_site: str,
-    output_language: str,
-    output_length: int,
-    url_list_str: str,
-    model_name: str,
+    init_settings: AskSettings,
     share_ui: bool,
     logger: logging.Logger,
 ) -> None:
@@ -537,31 +597,38 @@ def launch_gradio(
             with gr.Column():
 
                 query_input = gr.Textbox(label="Query", value=query)
+                hybrid_search_input = gr.Checkbox(
+                    label="Hybrid Search [Use both vector search and full-text search.]",
+                    value=init_settings.hybrid_search,
+                )
                 date_restrict_input = gr.Number(
                     label="Date Restrict (Optional) [0 or empty means no date limit.]",
-                    value=date_restrict,
+                    value=init_settings.date_restrict,
                 )
                 target_site_input = gr.Textbox(
                     label="Target Sites (Optional) [Empty means searching the whole web.]",
-                    value=target_site,
+                    value=init_settings.target_site,
                 )
                 output_language_input = gr.Textbox(
                     label="Output Language (Optional) [Default is English.]",
-                    value=output_language,
+                    value=init_settings.output_language,
                 )
                 output_length_input = gr.Number(
                     label="Output Length in words (Optional) [Default is automatically decided by LLM.]",
-                    value=output_length,
+                    value=init_settings.output_length,
                 )
                 url_list_input = gr.Textbox(
                     label="URL List (Optional) [When specified, scrape the urls instead of searching the web.]",
                     lines=5,
                     max_lines=20,
-                    value=url_list_str,
+                    value="\n".join(init_settings.url_list),
                 )
 
                 with gr.Accordion("More Options", open=False):
-                    model_name_input = gr.Textbox(label="Model Name", value=model_name)
+                    inference_model_name_input = gr.Textbox(
+                        label="Inference Model Name",
+                        value=init_settings.inference_model_name,
+                    )
 
                 submit_button = gr.Button("Submit")
 
@@ -570,7 +637,7 @@ def launch_gradio(
                 logs_output = gr.Textbox(label="Logs", lines=10)
 
         submit_button.click(
-            fn=ask.run_query,
+            fn=ask.run_query_gradio,
             inputs=[
                 query_input,
                 date_restrict_input,
@@ -578,7 +645,8 @@ def launch_gradio(
                 output_language_input,
                 output_length_input,
                 url_list_input,
-                model_name_input,
+                inference_model_name_input,
+                hybrid_search_input,
             ],
             outputs=[answer_output, logs_output],
         )
@@ -593,14 +661,14 @@ def launch_gradio(
     "-d",
     type=int,
     required=False,
-    default=None,
+    default=0,
     help="Restrict search results to a specific date range, default is no restriction",
 )
 @click.option(
     "--target-site",
     "-s",
     required=False,
-    default=None,
+    default="",
     help="Restrict search results to a specific site, default is no restriction",
 )
 @click.option(
@@ -613,23 +681,28 @@ def launch_gradio(
     "--output-length",
     type=int,
     required=False,
-    default=None,
+    default=0,
     help="Output length for the answer",
 )
 @click.option(
     "--url-list-file",
     type=str,
     required=False,
-    default=None,
+    default="",
     show_default=True,
     help="Instead of doing web search, scrape the target URL list and answer the query based on the content",
 )
 @click.option(
-    "--model-name",
+    "--inference-model-name",
     "-m",
     required=False,
     default="gpt-4o-mini",
     help="Model name to use for inference",
+)
+@click.option(
+    "--hybrid-search",
+    is_flag=True,
+    help="Use hybrid search mode with both vector search and full-text search",
 )
 @click.option(
     "--web-ui",
@@ -652,12 +725,23 @@ def search_extract_summarize(
     output_language: str,
     output_length: int,
     url_list_file: str,
-    model_name: str,
+    inference_model_name: str,
+    hybrid_search: bool,
     web_ui: bool,
     log_level: str,
 ):
     load_dotenv(dotenv_path=default_env_file, override=False)
     logger = _get_logger(log_level)
+
+    settings = AskSettings(
+        date_restrict=date_restrict,
+        target_site=target_site,
+        output_language=output_language,
+        output_length=output_length,
+        url_list=_read_url_list(url_list_file),
+        inference_model_name=inference_model_name,
+        hybrid_search=hybrid_search,
+    )
 
     if web_ui or os.environ.get("RUN_GRADIO_UI", "false").lower() != "false":
         if os.environ.get("SHARE_GRADIO_UI", "false").lower() == "true":
@@ -666,12 +750,7 @@ def search_extract_summarize(
             share_ui = False
         launch_gradio(
             query=query,
-            date_restrict=date_restrict,
-            target_site=target_site,
-            output_language=output_language,
-            output_length=output_length,
-            url_list_str=_read_url_list(url_list_file),
-            model_name=model_name,
+            init_settings=settings,
             share_ui=share_ui,
             logger=logger,
         )
@@ -680,17 +759,7 @@ def search_extract_summarize(
             raise Exception("Query is required for the command line mode")
         ask = Ask(logger=logger)
 
-        for result, _ in ask.run_query(
-            query=query,
-            date_restrict=date_restrict,
-            target_site=target_site,
-            output_language=output_language,
-            output_length=output_length,
-            url_list_str=_read_url_list(url_list_file),
-            model_name=model_name,
-        ):
-            final_result = result
-
+        final_result = ask.run_query(query=query, settings=settings)
         click.echo(final_result)
 
 
