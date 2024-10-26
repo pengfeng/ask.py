@@ -5,17 +5,18 @@
 A single Python program to implement the search-extract-summarize flow, similar to AI search
 engines such as Perplexity.
 
+> [!NOTE]
+> Our main goal is to illustrate the basic concepts of AI search engines with the raw constructs.
+> Performance or scalability is not in the scope of this program.
+
 > [UPDATE]
 >
+> - 2024-10-25: add hybrid search demo using DuckDB full-text search
 > - 2024-10-22: add GradIO integation
 > - 2024-10-21: use DuckDB for the vector search and use API for embedding
 > - 2024-10-20: allow to specify a list of input urls
 > - 2024-10-18: output-language and output-length parameters for LLM
 > - 2024-10-18: date-restrict and target-site parameters for seach
-
-> [!NOTE]
-> Our main goal is to illustrate the basic concepts of AI search engines with the raw constructs.
-> Performance or scalability is not in the scope of this program.
 
 ## The search-extract-summarize flow
 
@@ -76,7 +77,10 @@ Options:
   --url-list-file TEXT            Instead of doing web search, scrape the
                                   target URL list and answer the query based
                                   on the content
-  -m, --model-name TEXT           Model name to use for inference
+  -m, --inference-model-name TEXT
+                                  Model name to use for inference
+  --hybrid-search                 Use hybrid search mode with both vector
+                                  search and full-text search
   --web-ui                        Launch the web interface
   -l, --log-level [DEBUG|INFO|WARNING|ERROR]
                                   Set the logging level  [default: INFO]
