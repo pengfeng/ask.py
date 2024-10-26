@@ -90,7 +90,7 @@ Options:
 - [Jinja2](https://jinja.palletsprojects.com/en/3.0.x/)
 - [bs4](https://www.crummy.com/software/BeautifulSoup/bs4/doc/)
 - [DuckDB](https://github.com/duckdb/duckdb)
-- [GradIO](https://grad.io)
+- [GradIO](https://github.com/gradio-app/gradio)
 
 ## Screenshot for the GradIO integration
 
