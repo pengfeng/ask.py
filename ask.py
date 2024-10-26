@@ -246,7 +246,10 @@ CREATE TABLE {table_name} (
         )
         return table_name
 
-    def save_to_db(self, chunking_results: Dict[str, List[str]]) -> str:
+    def save_chunks_to_db(self, chunking_results: Dict[str, List[str]]) -> str:
+        """
+        The key of chunking_results is the URL and the value is the list of chunks.
+        """
         client = self._get_api_client()
         embed_batch_size = 50
         query_batch_size = 100
@@ -266,6 +269,9 @@ CREATE TABLE {table_name} (
             all_embeddings = executor.map(partial_get_embedding, batches)
         self.logger.info(f"✅ Finished embedding.")
 
+        # we batch the insert data to speed up the insertion operation
+        # although the DuckDB doc says executeMany is optimized for batch insert
+        # but we found that it is faster to batch the insert data and run a single insert
         for chunk_batch, embeddings in all_embeddings:
             url = chunk_batch[0]
             list_chunks = chunk_batch[1]
@@ -277,7 +283,6 @@ CREATE TABLE {table_name} (
             )
 
         for i in range(0, len(insert_data), query_batch_size):
-            # insert the batch into DuckDB
             value_str = ", ".join(
                 [
                     f"('{url}', '{chunk}', {embedding})"
@@ -307,6 +312,10 @@ CREATE TABLE {table_name} (
         return table_name
 
     def vector_search(self, table_name: str, query: str) -> List[Dict[str, Any]]:
+        """
+        The return value is a list of {url: str, chunk: str} records.
+        In a real world, we will define a class of Chunk to have more metadata such as offsets.
+        """
         client = self._get_api_client()
         embeddings = self.get_embedding(client, [query])[0]
 
@@ -471,7 +480,7 @@ Here is the context:
 
             logger.info(f"Saving {total_chunks} chunks to DB ...")
             yield "", update_logs()
-            table_name = self.save_to_db(chunking_results)
+            table_name = self.save_chunks_to_db(chunking_results)
             logger.info(f"✅ Successfully embedded and saved chunks to DB.")
             yield "", update_logs()
 
