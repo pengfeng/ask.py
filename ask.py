@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from functools import partial
 from queue import Queue
+from re import escape
 from typing import Any, Dict, Generator, List, Optional, Tuple
 
 import click
@@ -346,19 +347,62 @@ CREATE TABLE {table_name} (
 
         self.logger.debug(query_result)
 
-        matched_chunks = []
-        for record in query_result.fetchall():
+        # use a dict to remove duplicates from vector search and full-text search
+        matched_chunks_dict = {}
+        for vec_result in query_result.fetchall():
+            doc_id = vec_result[0]
             result_record = {
-                "url": record[1],
-                "chunk": record[2],
+                "url": vec_result[1],
+                "chunk": vec_result[2],
             }
-            matched_chunks.append(result_record)
+            matched_chunks_dict[doc_id] = result_record
 
         if settings.hybrid_search:
             self.logger.info("Running full-text search ...")
-            pass
 
-        return matched_chunks
+            self.db_con.execute(
+                f"""
+                PREPARE fts_query AS (
+                    WITH scored_docs AS (
+                        SELECT *, fts_main_{table_name}.match_bm25(
+                            doc_id, ?, fields := 'chunk'
+                        ) AS score FROM {table_name})
+                    SELECT doc_id, url, chunk, score
+                    FROM scored_docs
+                    WHERE score IS NOT NULL
+                    ORDER BY score DESC
+                    LIMIT 10)
+                """
+            )
+            self.db_con.execute("PRAGMA threads=4")
+
+            # You can run more complex query rewrite methods here
+            # usually: stemming, stop words, etc.
+            escaped_query = query.replace("'", " ")
+            fts_result: duckdb.DuckDBPyRelation = self.db_con.execute(
+                f"EXECUTE fts_query('{escaped_query}')"
+            )
+
+            index = 0
+            for fts_record in fts_result.fetchall():
+                index += 1
+                self.logger.debug(f"The full text search record #{index}: {fts_record}")
+                doc_id = fts_record[0]
+                result_record = {
+                    "url": fts_record[1],
+                    "chunk": fts_record[2],
+                }
+
+                # You can configure the score threashold and top-k
+                if fts_record[3] > 1:
+                    matched_chunks_dict[doc_id] = result_record
+                else:
+                    break
+
+                if index >= 10:
+                    break
+
+        return matched_chunks_dict.values()
 
     def _get_api_client(self) -> OpenAI:
         return OpenAI(api_key=self.llm_api_key, base_url=self.llm_base_url)
