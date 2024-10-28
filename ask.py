@@ -1,3 +1,5 @@
+import csv
+import io
 import json
 import logging
 import os
@@ -78,6 +80,31 @@ def _read_extract_schema_str(extract_schema_file: str) -> str:
     with open(extract_schema_file, "r") as f:
         schema_str = f.read()
     return schema_str
+
+
+def _output_csv(result_dict: Dict[str, List[BaseModel]], key_name: str) -> str:
+    output = io.StringIO()
+    csv_writer = None
+    # Iterate through dictionary
+    for src_url, items in result_dict.items():
+        for item in items:
+            value_dict = item.model_dump()
+            # Add SourceUrl key to each item dictionary
+            item_with_url = {**value_dict, key_name: src_url}
+
+            # Initialize the writer with headers from the first item
+            if csv_writer is None:
+                headers = list(value_dict.keys()) + [key_name]
+                csv_writer = csv.DictWriter(output, fieldnames=headers)
+                csv_writer.writeheader()
+
+            # Write each row
+            csv_writer.writerow(item_with_url)
+
+    # Retrieve CSV content as a string
+    csv_content = output.getvalue()
+    output.close()
+    return csv_content
 
 
 class Ask:
@@ -720,13 +747,7 @@ Below is the provided content:
                 logger.info("✅ Finished extraction from all urls.")
                 logger.info("Generating output ...")
                 yield "", update_logs()
-
-                answer = f"# Answer\n\n"
-                for url, items in aggregated_output.items():
-                    # add all the items and their src url as a table
-                    for item in items:
-                        answer += f"{item}\t{url}\n"
-
+                answer = _output_csv(aggregated_output, "SourceURL")
                 yield f"{answer}", update_logs()
             else:
                 raise Exception(f"Invalid output mode: {settings.output_mode}")
@@ -798,8 +819,10 @@ def launch_gradio(
                 )
                 extract_schema_input = gr.Textbox(
                     label="Extract Pydantic Schema",
-                    visible=False,
+                    visible=(init_settings.output_mode == "extract"),
                     value=init_settings.extract_schema_str,
+                    lines=5,
+                    max_lines=20,
                 )
                 output_mode_input.change(
                     fn=toggle_schema_textbox,
