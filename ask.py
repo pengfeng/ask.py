@@ -5,6 +5,7 @@ import queue
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
+from enum import Enum
 from functools import partial
 from queue import Queue
 from typing import Any, Dict, Generator, List, Optional, Tuple
@@ -23,6 +24,11 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 default_env_file = os.path.abspath(os.path.join(script_dir, ".env"))
 
 
+class OutputMode(str, Enum):
+    answer = "answer"
+    extract = "extract"
+
+
 class AskSettings(BaseModel):
     date_restrict: int
     target_site: str
@@ -31,6 +37,8 @@ class AskSettings(BaseModel):
     url_list: List[str]
     inference_model_name: str
     hybrid_search: bool
+    output_mode: OutputMode
+    extract_schema_str: str
 
 
 def _get_logger(log_level: str) -> logging.Logger:
@@ -58,6 +66,15 @@ def _read_url_list(url_list_file: str) -> List[str]:
         if link.strip() != "" and not link.startswith("#")
     ]
     return url_list
+
+
+def _read_extract_schema_str(extract_schema_file: str) -> str:
+    if not extract_schema_file:
+        return ""
+
+    with open(extract_schema_file, "r") as f:
+        schema_str = f.read()
+    return schema_str
 
 
 class Ask:
@@ -494,6 +511,8 @@ Here is the context:
         url_list_str: str,
         inference_model_name: str,
         hybrid_search: bool,
+        output_mode_str: str,
+        extract_schema_str: str,
     ) -> Generator[Tuple[str, str], None, Tuple[str, str]]:
         logger = self.logger
         log_queue = Queue()
@@ -511,6 +530,8 @@ Here is the context:
             url_list=url_list,
             inference_model_name=inference_model_name,
             hybrid_search=hybrid_search,
+            output_mode=OutputMode(output_mode_str),
+            extract_schema_str=extract_schema_str,
         )
 
         queue_handler = logging.Handler()
@@ -618,6 +639,8 @@ Here is the context:
             url_list_str=url_list_str,
             inference_model_name=settings.inference_model_name,
             hybrid_search=settings.hybrid_search,
+            output_mode_str=settings.output_mode.value(),
+            extract_schema_str=settings.extract_schema_str,
         ):
             final_result = result
         return final_result
@@ -630,6 +653,13 @@ def launch_gradio(
     logger: logging.Logger,
 ) -> None:
     ask = Ask(logger=logger)
+
+    def toggle_schema_textbox(option):
+        if option == "extract":
+            return gr.update(visible=True)
+        else:
+            return gr.update(visible=False)
+
     with gr.Blocks() as demo:
         gr.Markdown("# Ask.py - Web Search-Extract-Summarize")
         gr.Markdown(
@@ -640,9 +670,20 @@ def launch_gradio(
             with gr.Column():
 
                 query_input = gr.Textbox(label="Query", value=query)
-                hybrid_search_input = gr.Checkbox(
-                    label="Hybrid Search [Use both vector search and full-text search.]",
-                    value=init_settings.hybrid_search,
+                output_mode_input = gr.Radio(
+                    label="Output Mode [answer: simple answer, extract: get structured data]",
+                    choices=["answer", "extract"],
+                    value=init_settings.output_mode,
+                )
+                extract_schema_input = gr.Textbox(
+                    label="Extract Pydantic Schema",
+                    visible=False,
+                    value=init_settings.extract_schema_str,
+                )
+                output_mode_input.change(
+                    fn=toggle_schema_textbox,
+                    inputs=output_mode_input,
+                    outputs=extract_schema_input,
                 )
                 date_restrict_input = gr.Number(
                     label="Date Restrict (Optional) [0 or empty means no date limit.]",
@@ -668,6 +709,10 @@ def launch_gradio(
                 )
 
                 with gr.Accordion("More Options", open=False):
+                    hybrid_search_input = gr.Checkbox(
+                        label="Hybrid Search [Use both vector search and full-text search.]",
+                        value=init_settings.hybrid_search,
+                    )
                     inference_model_name_input = gr.Textbox(
                         label="Inference Model Name",
                         value=init_settings.inference_model_name,
@@ -690,6 +735,8 @@ def launch_gradio(
                 url_list_input,
                 inference_model_name_input,
                 hybrid_search_input,
+                output_mode_input,
+                extract_schema_input,
             ],
             outputs=[answer_output, logs_output],
         )
@@ -699,6 +746,14 @@ def launch_gradio(
 
 @click.command(help="Search web for the query and summarize the results.")
 @click.option("--query", "-q", required=False, help="Query to search")
+@click.option(
+    "--output-mode",
+    "-o",
+    type=click.Choice(["answer", "extract"], case_sensitive=False),
+    default="answer",
+    required=False,
+    help="Output mode for the answer, default is a simple answer",
+)
 @click.option(
     "--date-restrict",
     "-d",
@@ -736,6 +791,14 @@ def launch_gradio(
     help="Instead of doing web search, scrape the target URL list and answer the query based on the content",
 )
 @click.option(
+    "--extract-schema-file",
+    type=str,
+    required=False,
+    default="",
+    show_default=True,
+    help="Pydantic schema for the extract mode",
+)
+@click.option(
     "--inference-model-name",
     "-m",
     required=False,
@@ -763,11 +826,13 @@ def launch_gradio(
 )
 def search_extract_summarize(
     query: str,
+    output_mode: str,
     date_restrict: int,
     target_site: str,
     output_language: str,
     output_length: int,
     url_list_file: str,
+    extract_schema_file: str,
     inference_model_name: str,
     hybrid_search: bool,
     web_ui: bool,
@@ -784,6 +849,8 @@ def search_extract_summarize(
         url_list=_read_url_list(url_list_file),
         inference_model_name=inference_model_name,
         hybrid_search=hybrid_search,
+        output_mode=OutputMode(output_mode),
+        extract_schema_str=_read_extract_schema_str(extract_schema_file),
     )
 
     if web_ui or os.environ.get("RUN_GRADIO_UI", "false").lower() != "false":

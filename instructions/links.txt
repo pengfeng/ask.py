@@ -1,3 +1,4 @@
-# we will crawl these pages and answer the question based on their contents
+# you can specify a --url-list-file argument with links similar to the ones below
+# ask.py will crawl these pages and answer the question based on their contents
 https://en.wikipedia.org/wiki/Large_language_model
 https://en.wikipedia.org/wiki/Retrieval-augmented_generation
