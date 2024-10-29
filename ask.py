@@ -1,3 +1,5 @@
+import csv
+import io
 import json
 import logging
 import os
@@ -5,9 +7,10 @@ import queue
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
+from enum import Enum
 from functools import partial
 from queue import Queue
-from typing import Any, Dict, Generator, List, Optional, Tuple
+from typing import Any, Dict, Generator, List, Optional, Tuple, TypeVar
 
 import click
 import duckdb
@@ -17,10 +20,18 @@ from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from jinja2 import BaseLoader, Environment
 from openai import OpenAI
-from pydantic import BaseModel
+from pydantic import BaseModel, create_model
+
+TypeVar_BaseModel = TypeVar("TypeVar_BaseModel", bound=BaseModel)
+
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 default_env_file = os.path.abspath(os.path.join(script_dir, ".env"))
+
+
+class OutputMode(str, Enum):
+    answer = "answer"
+    extract = "extract"
 
 
 class AskSettings(BaseModel):
@@ -31,6 +42,8 @@ class AskSettings(BaseModel):
     url_list: List[str]
     inference_model_name: str
     hybrid_search: bool
+    output_mode: OutputMode
+    extract_schema_str: str
 
 
 def _get_logger(log_level: str) -> logging.Logger:
@@ -58,6 +71,36 @@ def _read_url_list(url_list_file: str) -> List[str]:
         if link.strip() != "" and not link.startswith("#")
     ]
     return url_list
+
+
+def _read_extract_schema_str(extract_schema_file: str) -> str:
+    if not extract_schema_file:
+        return ""
+
+    with open(extract_schema_file, "r") as f:
+        schema_str = f.read()
+    return schema_str
+
+
+def _output_csv(result_dict: Dict[str, List[BaseModel]], key_name: str) -> str:
+    # generate the CSV content from a Dict of URL and list of extracted items
+    output = io.StringIO()
+    csv_writer = None
+    for src_url, items in result_dict.items():
+        for item in items:
+            value_dict = item.model_dump()
+            item_with_url = {**value_dict, key_name: src_url}
+
+            if csv_writer is None:
+                headers = list(value_dict.keys()) + [key_name]
+                csv_writer = csv.DictWriter(output, fieldnames=headers)
+                csv_writer.writeheader()
+
+            csv_writer.writerow(item_with_url)
+
+    csv_content = output.getvalue()
+    output.close()
+    return csv_content
 
 
 class Ask:
@@ -411,6 +454,19 @@ CREATE TABLE {table_name} (
         template = env.from_string(template_str)
         return template.render(variables)
 
+    def _get_target_class(self, extract_schema_str: str) -> TypeVar_BaseModel:
+        local_namespace = {"BaseModel": BaseModel}
+        exec(extract_schema_str, local_namespace, local_namespace)
+        for key, value in local_namespace.items():
+            if key == "__builtins__":
+                continue
+            if key == "BaseModel":
+                continue
+            if isinstance(value, type):
+                if issubclass(value, BaseModel):
+                    return value
+        raise Exception("No Pydantic schema found in the extract schema str.")
+
     def run_inference(
         self,
         query: str,
@@ -484,6 +540,74 @@ Here is the context:
         response_str = completion.choices[0].message.content
         return response_str
 
+    def run_extract(
+        self,
+        query: str,
+        extract_schema_str: str,
+        target_content: str,
+        settings: AskSettings,
+    ) -> List[TypeVar_BaseModel]:
+        target_class = self._get_target_class(extract_schema_str)
+        system_prompt = (
+            "You are an expert of extract structual information from the document."
+        )
+        user_promt_template = """
+Given the provided content, if it contains information about {{ query }}, please extract the
+list of structured data items as defined in the following Pydantic schema:
+
+{{ extract_schema_str }}
+
+Below is the provided content:
+{{ content }}
+"""
+        user_prompt = self._render_template(
+            user_promt_template,
+            {
+                "query": query,
+                "content": target_content,
+                "extract_schema_str": extract_schema_str,
+            },
+        )
+
+        self.logger.debug(
+            f"Running extraction with model: {settings.inference_model_name}"
+        )
+        self.logger.debug(f"Final user prompt: {user_prompt}")
+
+        class_name = target_class.__name__
+        list_class_name = f"{class_name}_list"
+        response_pydantic_model = create_model(
+            list_class_name,
+            items=(List[target_class], ...),
+        )
+
+        api_client = self._get_api_client()
+        completion = api_client.beta.chat.completions.parse(
+            model=settings.inference_model_name,
+            messages=[
+                {
+                    "role": "system",
+                    "content": system_prompt,
+                },
+                {
+                    "role": "user",
+                    "content": user_prompt,
+                },
+            ],
+            response_format=response_pydantic_model,
+        )
+        if completion is None:
+            raise Exception("No completion from the API")
+
+        message = completion.choices[0].message
+        if message.refusal:
+            raise Exception(
+                f"Refused to extract information from the document: {message.refusal}."
+            )
+
+        extract_result = message.parsed
+        return extract_result.items
+
     def run_query_gradio(
         self,
         query: str,
@@ -494,6 +618,8 @@ Here is the context:
         url_list_str: str,
         inference_model_name: str,
         hybrid_search: bool,
+        output_mode_str: str,
+        extract_schema_str: str,
     ) -> Generator[Tuple[str, str], None, Tuple[str, str]]:
         logger = self.logger
         log_queue = Queue()
@@ -511,6 +637,8 @@ Here is the context:
             url_list=url_list,
             inference_model_name=inference_model_name,
             hybrid_search=hybrid_search,
+            output_mode=OutputMode(output_mode_str),
+            extract_schema_str=extract_schema_str,
         )
 
         queue_handler = logging.Handler()
@@ -547,47 +675,78 @@ Here is the context:
             logger.info(f"✅ Scraped {len(scrape_results)} URLs.")
             yield "", update_logs()
 
-            logger.info("Chunking the text ...")
-            yield "", update_logs()
-            chunking_results = self.chunk_results(scrape_results, 1000, 100)
-            total_chunks = 0
-            for url, chunks in chunking_results.items():
-                logger.debug(f"URL: {url}")
-                total_chunks += len(chunks)
-                for i, chunk in enumerate(chunks):
-                    logger.debug(f"Chunk {i+1}: {chunk}")
-            logger.info(f"✅ Generated {total_chunks} chunks ...")
-            yield "", update_logs()
+            if settings.output_mode == OutputMode.answer:
+                logger.info("Chunking the text ...")
+                yield "", update_logs()
+                chunking_results = self.chunk_results(scrape_results, 1000, 100)
+                total_chunks = 0
+                for url, chunks in chunking_results.items():
+                    logger.debug(f"URL: {url}")
+                    total_chunks += len(chunks)
+                    for i, chunk in enumerate(chunks):
+                        logger.debug(f"Chunk {i+1}: {chunk}")
+                logger.info(f"✅ Generated {total_chunks} chunks ...")
+                yield "", update_logs()
 
-            logger.info(f"Saving {total_chunks} chunks to DB ...")
-            yield "", update_logs()
-            table_name = self.save_chunks_to_db(chunking_results)
-            logger.info(f"✅ Successfully embedded and saved chunks to DB.")
-            yield "", update_logs()
+                logger.info(f"Saving {total_chunks} chunks to DB ...")
+                yield "", update_logs()
+                table_name = self.save_chunks_to_db(chunking_results)
+                logger.info(f"✅ Successfully embedded and saved chunks to DB.")
+                yield "", update_logs()
 
-            logger.info("Querying the vector DB to get context ...")
-            matched_chunks = self.vector_search(table_name, query, settings)
-            for i, result in enumerate(matched_chunks):
-                logger.debug(f"{i+1}. {result}")
-            logger.info(f"✅ Got {len(matched_chunks)} matched chunks.")
-            yield "", update_logs()
+                logger.info("Querying the vector DB to get context ...")
+                matched_chunks = self.vector_search(table_name, query, settings)
+                for i, result in enumerate(matched_chunks):
+                    logger.debug(f"{i+1}. {result}")
+                logger.info(f"✅ Got {len(matched_chunks)} matched chunks.")
+                yield "", update_logs()
 
-            logger.info("Running inference with context ...")
-            yield "", update_logs()
-            answer = self.run_inference(
-                query=query,
-                matched_chunks=matched_chunks,
-                settings=settings,
-            )
-            logger.info("✅ Finished inference API call.")
-            logger.info("Generating output ...")
-            yield "", update_logs()
+                logger.info("Running inference with context ...")
+                yield "", update_logs()
+                answer = self.run_inference(
+                    query=query,
+                    matched_chunks=matched_chunks,
+                    settings=settings,
+                )
+                logger.info("✅ Finished inference API call.")
+                logger.info("Generating output ...")
+                yield "", update_logs()
 
-            answer = f"# Answer\n\n{answer}\n"
-            references = "\n".join(
-                [f"[{i+1}] {result['url']}" for i, result in enumerate(matched_chunks)]
-            )
-            yield f"{answer}\n\n# References\n\n{references}", update_logs()
+                answer = f"# Answer\n\n{answer}\n"
+                references = "\n".join(
+                    [
+                        f"[{i+1}] {result['url']}"
+                        for i, result in enumerate(matched_chunks)
+                    ]
+                )
+                yield f"{answer}\n\n# References\n\n{references}", update_logs()
+            elif settings.output_mode == OutputMode.extract:
+                logger.info("Extracting structured data ...")
+                yield "", update_logs()
+
+                aggregated_output = {}
+                for url, text in scrape_results.items():
+                    items = self.run_extract(
+                        query=query,
+                        extract_schema_str=extract_schema_str,
+                        target_content=text,
+                        settings=settings,
+                    )
+                    self.logger.info(
+                        f"✅ Finished inference API call. Extracted {len(items)} items from {url}."
+                    )
+                    yield "", update_logs()
+
+                    self.logger.debug(items)
+                    aggregated_output[url] = items
+
+                logger.info("✅ Finished extraction from all urls.")
+                logger.info("Generating output ...")
+                yield "", update_logs()
+                answer = _output_csv(aggregated_output, "SourceURL")
+                yield f"{answer}", update_logs()
+            else:
+                raise Exception(f"Invalid output mode: {settings.output_mode}")
 
         logs = ""
         final_result = ""
@@ -618,6 +777,8 @@ Here is the context:
             url_list_str=url_list_str,
             inference_model_name=settings.inference_model_name,
             hybrid_search=settings.hybrid_search,
+            output_mode_str=settings.output_mode,
+            extract_schema_str=settings.extract_schema_str,
         ):
             final_result = result
         return final_result
@@ -630,6 +791,13 @@ def launch_gradio(
     logger: logging.Logger,
 ) -> None:
     ask = Ask(logger=logger)
+
+    def toggle_schema_textbox(option):
+        if option == "extract":
+            return gr.update(visible=True)
+        else:
+            return gr.update(visible=False)
+
     with gr.Blocks() as demo:
         gr.Markdown("# Ask.py - Web Search-Extract-Summarize")
         gr.Markdown(
@@ -640,9 +808,22 @@ def launch_gradio(
             with gr.Column():
 
                 query_input = gr.Textbox(label="Query", value=query)
-                hybrid_search_input = gr.Checkbox(
-                    label="Hybrid Search [Use both vector search and full-text search.]",
-                    value=init_settings.hybrid_search,
+                output_mode_input = gr.Radio(
+                    label="Output Mode [answer: simple answer, extract: get structured data]",
+                    choices=["answer", "extract"],
+                    value=init_settings.output_mode,
+                )
+                extract_schema_input = gr.Textbox(
+                    label="Extract Pydantic Schema",
+                    visible=(init_settings.output_mode == "extract"),
+                    value=init_settings.extract_schema_str,
+                    lines=5,
+                    max_lines=20,
+                )
+                output_mode_input.change(
+                    fn=toggle_schema_textbox,
+                    inputs=output_mode_input,
+                    outputs=extract_schema_input,
                 )
                 date_restrict_input = gr.Number(
                     label="Date Restrict (Optional) [0 or empty means no date limit.]",
@@ -668,6 +849,10 @@ def launch_gradio(
                 )
 
                 with gr.Accordion("More Options", open=False):
+                    hybrid_search_input = gr.Checkbox(
+                        label="Hybrid Search [Use both vector search and full-text search.]",
+                        value=init_settings.hybrid_search,
+                    )
                     inference_model_name_input = gr.Textbox(
                         label="Inference Model Name",
                         value=init_settings.inference_model_name,
@@ -690,6 +875,8 @@ def launch_gradio(
                 url_list_input,
                 inference_model_name_input,
                 hybrid_search_input,
+                output_mode_input,
+                extract_schema_input,
             ],
             outputs=[answer_output, logs_output],
         )
@@ -699,6 +886,14 @@ def launch_gradio(
 
 @click.command(help="Search web for the query and summarize the results.")
 @click.option("--query", "-q", required=False, help="Query to search")
+@click.option(
+    "--output-mode",
+    "-o",
+    type=click.Choice(["answer", "extract"], case_sensitive=False),
+    default="answer",
+    required=False,
+    help="Output mode for the answer, default is a simple answer",
+)
 @click.option(
     "--date-restrict",
     "-d",
@@ -736,6 +931,14 @@ def launch_gradio(
     help="Instead of doing web search, scrape the target URL list and answer the query based on the content",
 )
 @click.option(
+    "--extract-schema-file",
+    type=str,
+    required=False,
+    default="",
+    show_default=True,
+    help="Pydantic schema for the extract mode",
+)
+@click.option(
     "--inference-model-name",
     "-m",
     required=False,
@@ -763,11 +966,13 @@ def launch_gradio(
 )
 def search_extract_summarize(
     query: str,
+    output_mode: str,
     date_restrict: int,
     target_site: str,
     output_language: str,
     output_length: int,
     url_list_file: str,
+    extract_schema_file: str,
     inference_model_name: str,
     hybrid_search: bool,
     web_ui: bool,
@@ -775,6 +980,9 @@ def search_extract_summarize(
 ):
     load_dotenv(dotenv_path=default_env_file, override=False)
     logger = _get_logger(log_level)
+
+    if output_mode == "extract" and not extract_schema_file:
+        raise Exception("Extract mode requires the --extract-schema-file argument.")
 
     settings = AskSettings(
         date_restrict=date_restrict,
@@ -784,6 +992,8 @@ def search_extract_summarize(
         url_list=_read_url_list(url_list_file),
         inference_model_name=inference_model_name,
         hybrid_search=hybrid_search,
+        output_mode=OutputMode(output_mode),
+        extract_schema_str=_read_extract_schema_str(extract_schema_file),
     )
 
     if web_ui or os.environ.get("RUN_GRADIO_UI", "false").lower() != "false":

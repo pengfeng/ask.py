@@ -1,0 +1,3 @@
+class CompanyInfo(BaseModel):
+    name: str
+    description: str
