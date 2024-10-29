@@ -83,25 +83,21 @@ def _read_extract_schema_str(extract_schema_file: str) -> str:
 
 
 def _output_csv(result_dict: Dict[str, List[BaseModel]], key_name: str) -> str:
+    # generate the CSV content from a Dict of URL and list of extracted items
     output = io.StringIO()
     csv_writer = None
-    # Iterate through dictionary
     for src_url, items in result_dict.items():
         for item in items:
             value_dict = item.model_dump()
-            # Add SourceUrl key to each item dictionary
             item_with_url = {**value_dict, key_name: src_url}
 
-            # Initialize the writer with headers from the first item
             if csv_writer is None:
                 headers = list(value_dict.keys()) + [key_name]
                 csv_writer = csv.DictWriter(output, fieldnames=headers)
                 csv_writer.writeheader()
 
-            # Write each row
             csv_writer.writerow(item_with_url)
 
-    # Retrieve CSV content as a string
     csv_content = output.getvalue()
     output.close()
     return csv_content
