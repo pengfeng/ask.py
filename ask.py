@@ -940,7 +940,6 @@ def launch_gradio(
 )
 @click.option(
     "--inference-model-name",
-    "-m",
     required=False,
     default="gpt-4o-mini",
     help="Model name to use for inference",
@@ -951,9 +950,10 @@ def launch_gradio(
     help="Use hybrid search mode with both vector search and full-text search",
 )
 @click.option(
-    "--web-ui",
+    "--run-cli",
+    "-c",
     is_flag=True,
-    help="Launch the web interface",
+    help="Run as a command line tool instead of launching the Gradio UI",
 )
 @click.option(
     "-l",
@@ -975,7 +975,7 @@ def search_extract_summarize(
     extract_schema_file: str,
     inference_model_name: str,
     hybrid_search: bool,
-    web_ui: bool,
+    run_cli: bool,
     log_level: str,
 ):
     load_dotenv(dotenv_path=default_env_file, override=False)
@@ -996,8 +996,15 @@ def search_extract_summarize(
         extract_schema_str=_read_extract_schema_str(extract_schema_file),
     )
 
-    if web_ui or os.environ.get("RUN_GRADIO_UI", "false").lower() != "false":
-        if os.environ.get("SHARE_GRADIO_UI", "false").lower() == "true":
+    if run_cli:
+        if query is None:
+            raise Exception("Query is required for the command line mode")
+        ask = Ask(logger=logger)
+
+        final_result = ask.run_query(query=query, settings=settings)
+        click.echo(final_result)
+    else:
+        if os.environ.get("SHARE_GRADIO_UI", "true").lower() == "true":
             share_ui = True
         else:
             share_ui = False
@@ -1007,13 +1014,6 @@ def search_extract_summarize(
             share_ui=share_ui,
             logger=logger,
         )
-    else:
-        if query is None:
-            raise Exception("Query is required for the command line mode")
-        ask = Ask(logger=logger)
-
-        final_result = ask.run_query(query=query, settings=settings)
-        click.echo(final_result)
 
 
 if __name__ == "__main__":
