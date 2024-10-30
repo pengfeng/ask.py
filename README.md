@@ -115,4 +115,4 @@ Options:
 
 ### [Only use the latest information from a specific site](demos/search_on_site_and_date.md)
 
-### [Extract information from web search results](demos/extract_information.md)
+### [Extract information from web search results](demos/search_and_extract.md)
