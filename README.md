@@ -105,10 +105,9 @@ Options:
 
 ## GradIO Deployment
 
-![image](https://github.com/user-attachments/assets/0483e6a2-75d7-4fbd-813f-bfa13839c836)
-
 > [!NOTE]
 > Original GradIO docuemtn [here](https://www.gradio.app/guides/sharing-your-app).
+> We have a running example [here](https://huggingface.co/spaces/leettools/AskPy).
 
 ### Quick test and sharing
 
@@ -149,6 +148,8 @@ Now you need to go to the settings page to add some variables and secrets https:
 - sercet: LLM_API_KEY=<YOUR_LLM_API_KEY>
 
 Now you can use the HuggingFace space app to run your queries.
+
+![image](https://github.com/user-attachments/assets/0483e6a2-75d7-4fbd-813f-bfa13839c836)
 
 ## Use Cases
 
