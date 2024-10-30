@@ -103,14 +103,55 @@ Options:
 - [DuckDB](https://github.com/duckdb/duckdb)
 - [GradIO](https://github.com/gradio-app/gradio)
 
-## Screenshot for the GradIO integration
+## GradIO Deployment
 
 ![image](https://github.com/user-attachments/assets/0483e6a2-75d7-4fbd-813f-bfa13839c836)
 
+> [!NOTE]
+> Original GradIO docuemtn [here](https://www.gradio.app/guides/sharing-your-app).
+
+### Quick test and sharing
+
+You can run the program with `--web-ui` option to launch the web interface and check it locally.
+
+```bash
+python ask.py --web-ui
+* Running on local URL:  http://127.0.0.1:7860
+
+# you can also specify SHARE_GRADIO_UI to run a sharable UI through GradIO
+export SHARE_GRADIO_UI=True
+python ask.py --web-ui
+* Running on local URL:  http://127.0.0.1:7860
+* Running on public URL: https://77c277af0330326587.gradio.live
+```
+
+### To share a more permanent link using HuggingFace spaces
+
+- First, you need to [create a free Hugging Face account](https://huggingface.co/welcome).
+- Then in your [settings/token page](https://huggingface.co/settings/tokens), create a new token with Read permissions.
+- In your terminal, run the following commands in you app directory to deploy your program to
+  Hugging Face Spaces:
+
+```bash
+pip install gradio
+gradio deploy
+# You will be prompted to enter your HuggingFace token
+```
+
+After the deployment, the app should be on https://huggingface.co/spaces/<your_username>/AskPy
+
+Now you need to go to the settings page to add some variables and secrets https://huggingface.co/spaces/<your_username>/AskPy/settings
+
+- variable: RUN_GRADIO_UI=True
+- variable: SHARE_GRADIO_UI=True
+- secret: SEARCH_API_KEY=<YOUR_SEARCH_API_KEY>
+- secret: SEARCH_PROJECT_KEY=<YOUR_SEARCH_PROJECT_KEY>
+- sercet: LLM_API_KEY=<YOUR_LLM_API_KEY>
+
+Now you can use the HuggingFace space app to run your queries.
+
 ## Use Cases
 
-### [Search like Perplexity](demos/search_and_answer.md)
-
-### [Only use the latest information from a specific site](demos/search_on_site_and_date.md)
-
-### [Extract information from web search results](demos/search_and_extract.md)
+- [Search like Perplexity](demos/search_and_answer.md)
+- [Only use the latest information from a specific site](demos/search_on_site_and_date.md)
+- [Extract information from web search results](demos/search_and_extract.md)
