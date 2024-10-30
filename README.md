@@ -49,22 +49,23 @@ For example, we can:
 
 ```bash
 # recommend to use Python 3.10 or later and use venv or conda to create a virtual environment
-pip install -r requirements.txt
+% pip install -r requirements.txt
 
 # modify .env file to set the API keys or export them as environment variables as below
 
 # right now we use Google search API
-export SEARCH_API_KEY="your-google-search-api-key"
-export SEARCH_PROJECT_KEY="your-google-cx-key"
+% export SEARCH_API_KEY="your-google-search-api-key"
+% export SEARCH_PROJECT_KEY="your-google-cx-key"
 
 # right now we use OpenAI API
-export LLM_API_KEY="your-openai-api-key"
+% export LLM_API_KEY="your-openai-api-key"
 
-# run the program
-python ask.py -q "What is an LLM agent?"
+# By default, the program will start a web UI. See GradIO Deployment section for more info.
+# Run the program on command line with -c option
+% python ask.py -c -q "What is an LLM agent?"
 
 # we can specify more parameters to control the behavior such as date_restrict and target_site
-python ask.py --help
+% python ask.py --help
 Usage: ask.py [OPTIONS]
 
   Search web for the query and summarize the results.
@@ -84,11 +85,11 @@ Options:
                                   target URL list and answer the query based
                                   on the content
   --extract-schema-file TEXT      Pydantic schema for the extract mode
-  -m, --inference-model-name TEXT
-                                  Model name to use for inference
+  --inference-model-name TEXT     Model name to use for inference
   --hybrid-search                 Use hybrid search mode with both vector
                                   search and full-text search
-  --web-ui                        Launch the web interface
+  -c, --run-cli                   Run as a command line tool instead of
+                                  launching the Gradio UI
   -l, --log-level [DEBUG|INFO|WARNING|ERROR]
                                   Set the logging level  [default: INFO]
   --help                          Show this message and exit.
@@ -106,46 +107,49 @@ Options:
 ## GradIO Deployment
 
 > [!NOTE]
-> Original GradIO docuemtn [here](https://www.gradio.app/guides/sharing-your-app).
+> Original GradIO app-sharing document [here](https://www.gradio.app/guides/sharing-your-app).
 > We have a running example [here](https://huggingface.co/spaces/leettools/AskPy).
 
 ### Quick test and sharing
 
-You can run the program with `--web-ui` option to launch the web interface and check it locally.
+By default, the program will start a web UI and share through GradIO.
 
 ```bash
-python ask.py --web-ui
-* Running on local URL:  http://127.0.0.1:7860
-
-# you can also specify SHARE_GRADIO_UI to run a sharable UI through GradIO
-export SHARE_GRADIO_UI=True
-python ask.py --web-ui
+% python ask.py
 * Running on local URL:  http://127.0.0.1:7860
 * Running on public URL: https://77c277af0330326587.gradio.live
+
+# you can also specify SHARE_GRADIO_UI to only run locally
+% export SHARE_GRADIO_UI=False
+% python ask.py
+* Running on local URL:  http://127.0.0.1:7860
 ```
 
-### To share a more permanent link using HuggingFace spaces
+### To share a more permanent link using HuggingFace Spaces
 
-- First, you need to [create a free Hugging Face account](https://huggingface.co/welcome).
-- Then in your [settings/token page](https://huggingface.co/settings/tokens), create a new token with Read permissions.
+- First, you need to [create a free HuggingFace account](https://huggingface.co/welcome).
+- Then in your [settings/token page](https://huggingface.co/settings/tokens), create a new token with Write permissions.
 - In your terminal, run the following commands in you app directory to deploy your program to
-  Hugging Face Spaces:
+  HuggingFace Spaces:
 
 ```bash
-pip install gradio
-gradio deploy
-# You will be prompted to enter your HuggingFace token
+% pip install gradio
+% gradio deploy
+Creating new Spaces Repo in '/home/you/ask.py'. Collecting metadata, press Enter to accept default value.
+Enter Spaces app title [ask.py]: ask.py
+Enter Gradio app file [ask.py]:
+Enter Spaces hardware (cpu-basic, cpu-upgrade, t4-small, t4-medium, l4x1, l4x4, zero-a10g, a10g-small, a10g-large, a10g-largex2, a10g-largex4, a100-large, v5e-1x1, v5e-2x2, v5e-2x4) [cpu-basic]:
+Any Spaces secrets (y/n) [n]: y
+Enter secret name (leave blank to end): SEARCH_API_KEY
+Enter secret value for SEARCH_API_KEY: YOUR_SEARCH_API_KEY
+Enter secret name (leave blank to end): SEARCH_PROJECT_KEY
+Enter secret value for SEARCH_API_KEY: YOUR_SEARCH_PROJECT_KEY
+Enter secret name (leave blank to end): LLM_API_KEY
+Enter secret value for LLM_API_KEY: YOUR_LLM_API_KEY
+Enter secret name (leave blank to end):
+Create Github Action to automatically update Space on 'git push'? [n]: n
+Space available at https://huggingface.co/spaces/your_user_name/ask.py
 ```
-
-After the deployment, the app should be on https://huggingface.co/spaces/<your_username>/AskPy
-
-Now you need to go to the settings page to add some variables and secrets https://huggingface.co/spaces/<your_username>/AskPy/settings
-
-- variable: RUN_GRADIO_UI=True
-- variable: SHARE_GRADIO_UI=True
-- secret: SEARCH_API_KEY=<YOUR_SEARCH_API_KEY>
-- secret: SEARCH_PROJECT_KEY=<YOUR_SEARCH_PROJECT_KEY>
-- sercet: LLM_API_KEY=<YOUR_LLM_API_KEY>
 
 Now you can use the HuggingFace space app to run your queries.
 
