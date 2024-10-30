@@ -5,8 +5,6 @@
 A single Python program to implement the search-extract-summarize flow, similar to AI search
 engines such as Perplexity.
 
-[[toc]]
-
 > [!NOTE]
 > Our main goal is to illustrate the basic concepts of AI search engines with the raw constructs.
 > Performance or scalability is not in the scope of this program.
