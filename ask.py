@@ -1004,7 +1004,7 @@ def search_extract_summarize(
         final_result = ask.run_query(query=query, settings=settings)
         click.echo(final_result)
     else:
-        if os.environ.get("SHARE_GRADIO_UI", "true").lower() == "true":
+        if os.environ.get("SHARE_GRADIO_UI", "false").lower() == "true":
             share_ui = True
         else:
             share_ui = False
