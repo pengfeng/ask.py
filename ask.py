@@ -17,6 +17,7 @@ import duckdb
 import gradio as gr
 import requests
 from bs4 import BeautifulSoup
+from chonkie import Chunk, TokenChunker
 from dotenv import load_dotenv
 from jinja2 import BaseLoader, Environment
 from openai import OpenAI
@@ -112,6 +113,10 @@ class Ask:
             self.logger = logger
         else:
             self.logger = _get_logger("INFO")
+
+        self.logger.info("Initializing Chonkie ...")
+        self.chunker = TokenChunker(chunk_size=1000, chunk_overlap=100)
+        self.logger.info("✅ Successfully initialized Chonkie.")
 
         self.db_con = duckdb.connect(":memory:")
 
@@ -248,15 +253,10 @@ class Ask:
 
         return scrape_results
 
-    def chunk_results(
-        self, scrape_results: Dict[str, str], size: int, overlap: int
-    ) -> Dict[str, List[str]]:
+    def chunk_results(self, scrape_results: Dict[str, str]) -> Dict[str, List[Chunk]]:
         chunking_results: Dict[str, List[str]] = {}
         for url, text in scrape_results.items():
-            chunks = []
-            for pos in range(0, len(text), size - overlap):
-                chunks.append(text[pos : pos + size])
-            chunking_results[url] = chunks
+            chunking_results[url] = self.chunker.chunk(text)
         return chunking_results
 
     def get_embedding(self, client: OpenAI, texts: List[str]) -> List[List[float]]:
@@ -304,7 +304,7 @@ CREATE TABLE {table_name} (
         )
         return table_name
 
-    def save_chunks_to_db(self, chunking_results: Dict[str, List[str]]) -> str:
+    def save_chunks_to_db(self, all_chunks: Dict[str, List[Chunk]]) -> str:
         """
         The key of chunking_results is the URL and the value is the list of chunks.
         """
@@ -316,10 +316,10 @@ CREATE TABLE {table_name} (
         table_name = self._create_table()
 
         batches: List[Tuple[str, List[str]]] = []
-        for url, list_chunks in chunking_results.items():
+        for url, list_chunks in all_chunks.items():
             for i in range(0, len(list_chunks), embed_batch_size):
-                list_chunks = list_chunks[i : i + embed_batch_size]
-                batches.append((url, list_chunks))
+                batch = [chunk.text for chunk in list_chunks[i : i + embed_batch_size]]
+                batches.append((url, batch))
 
         self.logger.info(f"Embedding {len(batches)} batches of chunks ...")
         partial_get_embedding = partial(self.batch_get_embedding, client)
@@ -327,9 +327,9 @@ CREATE TABLE {table_name} (
             all_embeddings = executor.map(partial_get_embedding, batches)
         self.logger.info(f"✅ Finished embedding.")
 
-        # we batch the insert data to speed up the insertion operation
-        # although the DuckDB doc says executeMany is optimized for batch insert
-        # but we found that it is faster to batch the insert data and run a single insert
+        # We batch the insert data to speed up the insertion operation.
+        # Although the DuckDB doc says executeMany is optimized for batch insert,
+        # we found that it is faster to batch the insert data and run a single insert.
         for chunk_batch, embeddings in all_embeddings:
             url = chunk_batch[0]
             list_chunks = chunk_batch[1]
@@ -678,19 +678,19 @@ Below is the provided content:
             if settings.output_mode == OutputMode.answer:
                 logger.info("Chunking the text ...")
                 yield "", update_logs()
-                chunking_results = self.chunk_results(scrape_results, 1000, 100)
-                total_chunks = 0
-                for url, chunks in chunking_results.items():
+                all_chunks = self.chunk_results(scrape_results)
+                chunk_count = 0
+                for url, chunks in all_chunks.items():
                     logger.debug(f"URL: {url}")
-                    total_chunks += len(chunks)
+                    chunk_count += len(chunks)
                     for i, chunk in enumerate(chunks):
-                        logger.debug(f"Chunk {i+1}: {chunk}")
-                logger.info(f"✅ Generated {total_chunks} chunks ...")
+                        logger.debug(f"Chunk {i+1}: {chunk.text}")
+                logger.info(f"✅ Generated {chunk_count} chunks ...")
                 yield "", update_logs()
 
-                logger.info(f"Saving {total_chunks} chunks to DB ...")
+                logger.info(f"Saving {chunk_count} chunks to DB ...")
                 yield "", update_logs()
-                table_name = self.save_chunks_to_db(chunking_results)
+                table_name = self.save_chunks_to_db(all_chunks)
                 logger.info(f"✅ Successfully embedded and saved chunks to DB.")
                 yield "", update_logs()
 

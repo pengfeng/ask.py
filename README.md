@@ -5,6 +5,10 @@
 A single Python program to implement the search-extract-summarize flow, similar to AI search
 engines such as Perplexity.
 
+We have a running UI example [in HuggingFace Spaces](https://huggingface.co/spaces/leettools/AskPy).
+
+![image](https://github.com/user-attachments/assets/0483e6a2-75d7-4fbd-813f-bfa13839c836)
+
 > [!NOTE]
 > Our main goal is to illustrate the basic concepts of AI search engines with the raw constructs.
 > Performance or scalability is not in the scope of this program.
@@ -108,7 +112,6 @@ Options:
 
 > [!NOTE]
 > Original GradIO app-sharing document [here](https://www.gradio.app/guides/sharing-your-app).
-> We have a running example [here](https://huggingface.co/spaces/leettools/AskPy).
 
 ### Quick test and sharing
 
@@ -152,8 +155,6 @@ Space available at https://huggingface.co/spaces/your_user_name/ask.py
 ```
 
 Now you can use the HuggingFace space app to run your queries.
-
-![image](https://github.com/user-attachments/assets/0483e6a2-75d7-4fbd-813f-bfa13839c836)
 
 ## Use Cases
 
