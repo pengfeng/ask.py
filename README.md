@@ -6,8 +6,9 @@ A single Python program to implement the search-extract-summarize flow, similar 
 engines such as Perplexity.
 
 - You can run it on command line or with a GradIO UI.
-- You can also control the output behavior, e.g., extract structured data or change output language,
-  and the search behavior, e.g., say restrict to a specific site or date.
+- You can control the output behavior, e.g., extract structured data or change output language,
+- You can control the search behavior, e.g., restrict to a specific site or date, or just scrape
+  a specified list of URLs.
 - You can run it in a cron job or bash script to automate complex search/data extraction tasks.
 
 We have a running UI example [in HuggingFace Spaces](https://huggingface.co/spaces/leettools/AskPy).
@@ -15,10 +16,11 @@ We have a running UI example [in HuggingFace Spaces](https://huggingface.co/spac
 ![image](https://github.com/user-attachments/assets/0483e6a2-75d7-4fbd-813f-bfa13839c836)
 
 > [!NOTE]
-> Our main goal is to illustrate the basic concepts of AI search engines with the raw constructs.
-> Performance or scalability is not in the scope of this program.
-> We are planning to open source a real search-enabled AI toolset with real DB setup, real document
-> pipeline, and real query engine soon. Star and watch this repo for updates!
+>
+> - Our main goal is to illustrate the basic concepts of AI search engines with the raw constructs.
+>   Performance or scalability is not in the scope of this program.
+> - We are planning to open source a real search-enabled AI toolset with real DB setup, real document
+>   pipeline, and real query engine soon. Star and watch this repo for updates!
 
 > [UPDATE]
 >
