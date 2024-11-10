@@ -5,6 +5,11 @@
 A single Python program to implement the search-extract-summarize flow, similar to AI search
 engines such as Perplexity.
 
+- You can run it on command line or with a GradIO UI.
+- You can also control the output behavior, e.g., extract structured data or change output language,
+  and the search behavior, e.g., say restrict to a specific site or date.
+- You can run it in a cron job or bash script to automate complex search/data extraction tasks.
+
 We have a running UI example [in HuggingFace Spaces](https://huggingface.co/spaces/leettools/AskPy).
 
 ![image](https://github.com/user-attachments/assets/0483e6a2-75d7-4fbd-813f-bfa13839c836)
@@ -12,9 +17,12 @@ We have a running UI example [in HuggingFace Spaces](https://huggingface.co/spac
 > [!NOTE]
 > Our main goal is to illustrate the basic concepts of AI search engines with the raw constructs.
 > Performance or scalability is not in the scope of this program.
+> We are planning to open source a real search-enabled AI toolset with real DB setup, real document
+> pipeline, and real query engine soon. Star and watch this repo for updates!
 
 > [UPDATE]
 >
+> - 2024-11-10: add Chonkie as the default chunker
 > - 2024-10-28: add extract function as a new output mode
 > - 2024-10-25: add hybrid search demo using DuckDB full-text search
 > - 2024-10-22: add GradIO integation
@@ -107,6 +115,7 @@ Options:
 - [bs4](https://www.crummy.com/software/BeautifulSoup/bs4/doc/)
 - [DuckDB](https://github.com/duckdb/duckdb)
 - [GradIO](https://github.com/gradio-app/gradio)
+- [Chonkie](https://github.com/bhavnicksm/chonkie)
 
 ## GradIO Deployment
 
