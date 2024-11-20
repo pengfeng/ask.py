@@ -13,18 +13,16 @@ from queue import Queue
 from typing import Any, Dict, Generator, List, Optional, Tuple, TypeVar
 
 import click
-import duckdb
 import gradio as gr
 import requests
 from bs4 import BeautifulSoup
-from chonkie import Chunk, TokenChunker
+from chonkie import Chunk
 from dotenv import load_dotenv
 from jinja2 import BaseLoader, Environment
 from openai import OpenAI
 from pydantic import BaseModel, create_model
 
 TypeVar_BaseModel = TypeVar("TypeVar_BaseModel", bound=BaseModel)
-
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 default_env_file = os.path.abspath(os.path.join(script_dir, ".env"))
@@ -35,6 +33,11 @@ class OutputMode(str, Enum):
     extract = "extract"
 
 
+class InputMode(str, Enum):
+    search = "search"
+    local = "local"
+
+
 class AskSettings(BaseModel):
     date_restrict: int
     target_site: str
@@ -43,6 +46,7 @@ class AskSettings(BaseModel):
     url_list: List[str]
     inference_model_name: str
     hybrid_search: bool
+    input_mode: InputMode
     output_mode: OutputMode
     extract_schema_str: str
 
@@ -114,17 +118,9 @@ class Ask:
         else:
             self.logger = _get_logger("INFO")
 
-        self.logger.info("Initializing Chonkie ...")
-        self.chunker = TokenChunker(chunk_size=1000, chunk_overlap=100)
-        self.logger.info("✅ Successfully initialized Chonkie.")
-
-        self.db_con = duckdb.connect(":memory:")
-
-        self.db_con.install_extension("vss")
-        self.db_con.load_extension("vss")
-        self.db_con.install_extension("fts")
-        self.db_con.load_extension("fts")
-        self.db_con.sql("CREATE SEQUENCE seq_docid START 1000")
+        self.init_converter()
+        self.init_chunker()
+        self.init_db()
 
         self.session = requests.Session()
         user_agent: str = (
@@ -160,6 +156,36 @@ class Ask:
         if self.embedding_model is None or self.embedding_dimensions is None:
             self.embedding_model = "text-embedding-3-small"
             self.embedding_dimensions = 1536
+
+    def init_converter(self) -> None:
+        from docling.document_converter import DocumentConverter
+
+        self.logger.info("Initializing converter ...")
+        self.converter = DocumentConverter()
+        self.logger.info("✅ Successfully initialized Docling.")
+
+    def init_chunker(self) -> None:
+        from chonkie import TokenChunker
+
+        self.logger.info("Initializing chunker ...")
+        self.chunker = TokenChunker(chunk_size=1000, chunk_overlap=100)
+        self.logger.info("✅ Successfully initialized Chonkie.")
+
+    def init_db(self) -> None:
+        import duckdb
+
+        self.logger.info("Initializing database ...")
+        self.db_con = duckdb.connect(":memory:")
+        self.db_con.install_extension("vss")
+        self.db_con.load_extension("vss")
+        self.db_con.install_extension("fts")
+        self.db_con.load_extension("fts")
+        self.db_con.sql("CREATE SEQUENCE seq_docid START 1000")
+        self.logger.info("✅ Successfully initialized DuckDB.")
+
+    def convert_file_to_md(self, file_path: str) -> str:
+        result = self.converter.convert(file_path)
+        return result.document.export_to_markdown()
 
     def search_web(self, query: str, settings: AskSettings) -> List[str]:
         escaped_query = urllib.parse.quote(query)
@@ -372,6 +398,8 @@ CREATE TABLE {table_name} (
     def vector_search(
         self, table_name: str, query: str, settings: AskSettings
     ) -> List[Dict[str, Any]]:
+        import duckdb
+
         """
         The return value is a list of {url: str, chunk: str} records.
         In a real world, we will define a class of Chunk to have more metadata such as offsets.
@@ -618,6 +646,7 @@ Below is the provided content:
         url_list_str: str,
         inference_model_name: str,
         hybrid_search: bool,
+        input_mode_str: str,
         output_mode_str: str,
         extract_schema_str: str,
     ) -> Generator[Tuple[str, str], None, Tuple[str, str]]:
@@ -637,10 +666,12 @@ Below is the provided content:
             url_list=url_list,
             inference_model_name=inference_model_name,
             hybrid_search=hybrid_search,
+            input_mode=InputMode(input_mode_str),
             output_mode=OutputMode(output_mode_str),
             extract_schema_str=extract_schema_str,
         )
 
+        # add a queue handler to the logger to capture the logs
         queue_handler = logging.Handler()
         formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
         queue_handler.emit = lambda record: log_queue.put(formatter.format(record))
@@ -658,27 +689,48 @@ Below is the provided content:
 
         # wrap the process in a generator to yield the logs to integrate with GradIO
         def process_with_logs():
-            if len(settings.url_list) > 0:
-                links = settings.url_list
-            else:
-                logger.info("Searching the web ...")
-                yield "", update_logs()
-                links = self.search_web(query, settings)
-                logger.info(f"✅ Found {len(links)} links for query: {query}")
-                for i, link in enumerate(links):
-                    logger.debug(f"{i+1}. {link}")
-                yield "", update_logs()
+            # the key is the URI and the result is the scraped text
+            target_documents: Dict[str, str] = {}
 
-            logger.info("Scraping the URLs ...")
-            yield "", update_logs()
-            scrape_results = self.scrape_urls(links)
-            logger.info(f"✅ Scraped {len(scrape_results)} URLs.")
-            yield "", update_logs()
+            if settings.input_mode == InputMode.search:
+                if len(settings.url_list) > 0:
+                    links = settings.url_list
+                else:
+                    logger.info("Searching the web ...")
+                    yield "", update_logs()
+                    links = self.search_web(query, settings)
+                    logger.info(f"✅ Found {len(links)} links for query: {query}")
+                    for i, link in enumerate(links):
+                        logger.debug(f"{i+1}. {link}")
+                    yield "", update_logs()
+
+                logger.info("Scraping the URLs ...")
+                yield "", update_logs()
+                target_documents = self.scrape_urls(links)
+                logger.info(f"✅ Scraped {len(target_documents)} URLs.")
+                yield "", update_logs()
+            elif settings.input_mode == InputMode.local:
+                logger.info("Processing the local data directory ...")
+                yield "", update_logs()
+                # read the files from the data folder
+                data_folder = os.path.join(script_dir, "data")
+                if not os.path.exists(data_folder):
+                    raise Exception("Data folder not found.")
+                for file_name in os.listdir(data_folder):
+                    logger.info(f"Processing {file_name} ...")
+                    yield "", update_logs()
+                    file_path = os.path.join(data_folder, file_name)
+                    file_uri = f"file://{file_path}"
+                    target_documents[file_uri] = self.convert_file_to_md(file_path)
+                    logger.info(f"✅ Finished processing {file_name}.")
+                    yield "", update_logs()
+            else:
+                raise Exception(f"Invalid input mode: {settings.input_mode}")
 
             if settings.output_mode == OutputMode.answer:
                 logger.info("Chunking the text ...")
                 yield "", update_logs()
-                all_chunks = self.chunk_results(scrape_results)
+                all_chunks = self.chunk_results(target_documents)
                 chunk_count = 0
                 for url, chunks in all_chunks.items():
                     logger.debug(f"URL: {url}")
@@ -725,7 +777,7 @@ Below is the provided content:
                 yield "", update_logs()
 
                 aggregated_output = {}
-                for url, text in scrape_results.items():
+                for url, text in target_documents.items():
                     items = self.run_extract(
                         query=query,
                         extract_schema_str=extract_schema_str,
@@ -777,6 +829,7 @@ Below is the provided content:
             url_list_str=url_list_str,
             inference_model_name=settings.inference_model_name,
             hybrid_search=settings.hybrid_search,
+            input_mode_str=settings.input_mode,
             output_mode_str=settings.output_mode,
             extract_schema_str=settings.extract_schema_str,
         ):
@@ -808,6 +861,11 @@ def launch_gradio(
             with gr.Column():
 
                 query_input = gr.Textbox(label="Query", value=query)
+                input_mode_input = gr.Radio(
+                    label="Input Mode [search: from search or url, local: from local data]",
+                    choices=["search", "local"],
+                    value=init_settings.input_mode,
+                )
                 output_mode_input = gr.Radio(
                     label="Output Mode [answer: simple answer, extract: get structured data]",
                     choices=["answer", "extract"],
@@ -875,6 +933,7 @@ def launch_gradio(
                 url_list_input,
                 inference_model_name_input,
                 hybrid_search_input,
+                input_mode_input,
                 output_mode_input,
                 extract_schema_input,
             ],
@@ -886,6 +945,17 @@ def launch_gradio(
 
 @click.command(help="Search web for the query and summarize the results.")
 @click.option("--query", "-q", required=False, help="Query to search")
+@click.option(
+    "--input-mode",
+    "-i",
+    type=click.Choice(["search", "local"], case_sensitive=False),
+    default="search",
+    required=False,
+    help=(
+        "Input mode for the query, default is search. "
+        "When using local, files under 'data' folder will be used as input."
+    ),
+)
 @click.option(
     "--output-mode",
     "-o",
@@ -945,9 +1015,9 @@ def launch_gradio(
     help="Model name to use for inference",
 )
 @click.option(
-    "--hybrid-search",
+    "--vector-search-only",
     is_flag=True,
-    help="Use hybrid search mode with both vector search and full-text search",
+    help="Do not use hybrid search mode, use vector search only.",
 )
 @click.option(
     "--run-cli",
@@ -966,6 +1036,7 @@ def launch_gradio(
 )
 def search_extract_summarize(
     query: str,
+    input_mode: str,
     output_mode: str,
     date_restrict: int,
     target_site: str,
@@ -974,7 +1045,7 @@ def search_extract_summarize(
     url_list_file: str,
     extract_schema_file: str,
     inference_model_name: str,
-    hybrid_search: bool,
+    vector_search_only: bool,
     run_cli: bool,
     log_level: str,
 ):
@@ -991,7 +1062,8 @@ def search_extract_summarize(
         output_length=output_length,
         url_list=_read_url_list(url_list_file),
         inference_model_name=inference_model_name,
-        hybrid_search=hybrid_search,
+        hybrid_search=(not vector_search_only),
+        input_mode=InputMode(input_mode),
         output_mode=OutputMode(output_mode),
         extract_schema_str=_read_extract_schema_str(extract_schema_file),
     )
