@@ -10,10 +10,18 @@ engines such as Perplexity.
 - You can control the search behavior, e.g., restrict to a specific site or date, or just scrape
   a specified list of URLs.
 - You can run it in a cron job or bash script to automate complex search/data extraction tasks.
+- You can ask questions against local files.
 
 We have a running UI example [in HuggingFace Spaces](https://huggingface.co/spaces/leettools/AskPy).
 
 ![image](https://github.com/user-attachments/assets/0483e6a2-75d7-4fbd-813f-bfa13839c836)
+
+## Demo Use Cases
+
+- [Search like Perplexity](demos/search_and_answer.md)
+- [Only use the latest information from a specific site](demos/search_on_site_and_date.md)
+- [Extract information from web search results](demos/search_and_extract.md)
+- [Ask questions against local files](demos/local_files.md)
 
 > [!NOTE]
 >
@@ -24,6 +32,7 @@ We have a running UI example [in HuggingFace Spaces](https://huggingface.co/spac
 
 > [UPDATE]
 >
+> - 2024-11-20: add Docling converter and local mode to query against local files
 > - 2024-11-10: add Chonkie as the default chunker
 > - 2024-10-28: add extract function as a new output mode
 > - 2024-10-25: add hybrid search demo using DuckDB full-text search
@@ -37,11 +46,11 @@ We have a running UI example [in HuggingFace Spaces](https://huggingface.co/spac
 
 Given a query, the program will
 
-- search Google for the top 10 web pages
-- crawl and scape the pages for their text content
+- in search mode: search Google for the top 10 web pages
+- in local mode: use the local files under the 'data' directory
+- crawl and scape the result documents for their text content
 - chunk the text content into chunks and save them into a vectordb
-- perform a vector search with the query and find the top 10 matched chunks
-- [Optional] search using full-text search and combine the results with the vector search
+- perform a hybrid search (vector and BM25 FTS) with the query and find the top 10 matched chunks
 - [Optional] use a reranker to re-rank the top chunks
 - use the top chunks as the context to ask an LLM to generate the answer
 - output the answer with the references
@@ -58,6 +67,9 @@ For example, we can:
 - ask LLM to use a specific language to answer the question.
 - ask LLM to answer with a specific length.
 - crawl a specific list of urls and answer based on those contents only.
+
+This program can serve as a playground to understand and experiment with different components in
+the pipeline.
 
 ## Quick start
 
@@ -78,6 +90,9 @@ For example, we can:
 # Run the program on command line with -c option
 % python ask.py -c -q "What is an LLM agent?"
 
+# You can also query your local files under the 'data' directory using the local mode
+% python ask.py -i local -c -q "How does Ask.py work?"
+
 # we can specify more parameters to control the behavior such as date_restrict and target_site
 % python ask.py --help
 Usage: ask.py [OPTIONS]
@@ -86,6 +101,10 @@ Usage: ask.py [OPTIONS]
 
 Options:
   -q, --query TEXT                Query to search
+  -i, --input-mode [search|local]
+                                  Input mode for the query, default is search.
+                                  When using local, files under 'data' folder
+                                  will be used as input.
   -o, --output-mode [answer|extract]
                                   Output mode for the answer, default is a
                                   simple answer
@@ -100,8 +119,8 @@ Options:
                                   on the content
   --extract-schema-file TEXT      Pydantic schema for the extract mode
   --inference-model-name TEXT     Model name to use for inference
-  --hybrid-search                 Use hybrid search mode with both vector
-                                  search and full-text search
+  --vector-search-only            Do not use hybrid search mode, use vector
+                                  search only.
   -c, --run-cli                   Run as a command line tool instead of
                                   launching the Gradio UI
   -l, --log-level [DEBUG|INFO|WARNING|ERROR]
@@ -166,9 +185,3 @@ Space available at https://huggingface.co/spaces/your_user_name/ask.py
 ```
 
 Now you can use the HuggingFace space app to run your queries.
-
-## Use Cases
-
-- [Search like Perplexity](demos/search_and_answer.md)
-- [Only use the latest information from a specific site](demos/search_on_site_and_date.md)
-- [Extract information from web search results](demos/search_and_extract.md)

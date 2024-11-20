@@ -1,57 +1,71 @@
-```
-% python ask.py -q "Why do we need agentic RAG even if we have ChatGPT?"
-
-✅ Found 10 links for query: Why do we need agentic RAG even if we have ChatGPT?
-✅ Scraping the URLs ...
-✅ Scraped 10 URLs ...
-✅ Chunking the text ...
-✅ Saving to vector DB ...
-✅ Querying the vector DB ...
-✅ Running inference with context ...
-
+```bash
+% python ask.py -c -q "Why do we need agentic RAG even if we have ChatGPT?"
+2024-11-20 10:03:49,810 - INFO - Initializing converter ...
+2024-11-20 10:03:49,810 - INFO - ✅ Successfully initialized Docling.
+2024-11-20 10:03:49,810 - INFO - Initializing chunker ...
+2024-11-20 10:03:50,052 - INFO - ✅ Successfully initialized Chonkie.
+2024-11-20 10:03:50,414 - INFO - Initializing database ...
+2024-11-20 10:03:50,544 - INFO - ✅ Successfully initialized DuckDB.
+2024-11-20 10:03:50,545 - INFO - Searching the web ...
+2024-11-20 10:03:51,239 - INFO - ✅ Found 10 links for query: Why do we need agentic RAG even if we have ChatGPT?
+2024-11-20 10:03:51,239 - INFO - Scraping the URLs ...
+2024-11-20 10:03:51,239 - INFO - Scraping https://community.openai.com/t/how-to-use-rag-properly-and-what-types-of-query-it-is-good-at/658204 ...
+2024-11-20 10:03:51,240 - INFO - Scraping https://www.reddit.com/r/LangChain/comments/1ey94rs/is_rag_still_a_thing/ ...
+2024-11-20 10:03:51,242 - INFO - Scraping https://community.openai.com/t/prompt-engineering-for-rag/621495 ...
+2024-11-20 10:03:51,242 - INFO - Scraping https://www.linkedin.com/posts/elijahbutler_can-you-use-chat-gpt-as-a-data-analyst-activity-7227666801688461312-qk6v ...
+2024-11-20 10:03:51,243 - INFO - Scraping https://www.reddit.com/r/ChatGPTCoding/comments/1cft751/my_experience_with_github_copilot_vs_cursor/ ...
+2024-11-20 10:03:51,244 - INFO - Scraping https://www.ben-evans.com/benedictevans/2024/6/8/building-ai-products ...
+2024-11-20 10:03:51,244 - INFO - Scraping https://news.ycombinator.com/item?id=40739982 ...
+2024-11-20 10:03:51,245 - INFO - Scraping https://www.linkedin.com/posts/andrewyng_github-andrewyngtranslation-agent-activity-7206347897938866176-5tDJ ...
+2024-11-20 10:03:51,247 - INFO - Scraping https://medium.com/@sandyshah1990/starting-to-learn-agentic-rag-e7ec916c83a2 ...
+2024-11-20 10:03:51,248 - INFO - Scraping https://www.linkedin.com/posts/kurtcagle_agentic-rag-personalizing-and-optimizing-activity-7198097129993613312-z7Sm ...
+2024-11-20 10:03:51,836 - INFO - ✅ Successfully scraped https://www.ben-evans.com/benedictevans/2024/6/8/building-ai-products with length: 8824
+2024-11-20 10:03:51,839 - INFO - ✅ Successfully scraped https://medium.com/@sandyshah1990/starting-to-learn-agentic-rag-e7ec916c83a2 with length: 18260
+2024-11-20 10:03:51,852 - INFO - ✅ Successfully scraped https://community.openai.com/t/how-to-use-rag-properly-and-what-types-of-query-it-is-good-at/658204 with length: 9895
+2024-11-20 10:03:51,869 - INFO - ✅ Successfully scraped https://community.openai.com/t/prompt-engineering-for-rag/621495 with length: 21898
+2024-11-20 10:03:52,038 - INFO - ✅ Successfully scraped https://news.ycombinator.com/item?id=40739982 with length: 122350
+2024-11-20 10:03:52,227 - INFO - ✅ Successfully scraped https://www.linkedin.com/posts/andrewyng_github-andrewyngtranslation-agent-activity-7206347897938866176-5tDJ with length: 35845
+2024-11-20 10:03:52,425 - INFO - ✅ Successfully scraped https://www.linkedin.com/posts/kurtcagle_agentic-rag-personalizing-and-optimizing-activity-7198097129993613312-z7Sm with length: 24524
+2024-11-20 10:03:52,480 - INFO - ✅ Successfully scraped https://www.linkedin.com/posts/elijahbutler_can-you-use-chat-gpt-as-a-data-analyst-activity-7227666801688461312-qk6v with length: 25621
+2024-11-20 10:03:52,949 - INFO - ✅ Successfully scraped https://www.reddit.com/r/ChatGPTCoding/comments/1cft751/my_experience_with_github_copilot_vs_cursor/ with length: 5138
+2024-11-20 10:03:52,996 - INFO - ✅ Successfully scraped https://www.reddit.com/r/LangChain/comments/1ey94rs/is_rag_still_a_thing/ with length: 2486
+2024-11-20 10:03:52,996 - INFO - ✅ Scraped 10 URLs.
+2024-11-20 10:03:52,996 - INFO - Chunking the text ...
+2024-11-20 10:03:53,044 - INFO - ✅ Generated 75 chunks ...
+2024-11-20 10:03:53,044 - INFO - Saving 75 chunks to DB ...
+2024-11-20 10:03:53,065 - INFO - Embedding 10 batches of chunks ...
+2024-11-20 10:03:54,563 - INFO - ✅ Finished embedding.
+2024-11-20 10:03:55,583 - INFO - ✅ Created the vector index ...
+2024-11-20 10:03:55,677 - INFO - ✅ Created the full text search index ...
+2024-11-20 10:03:55,679 - INFO - ✅ Successfully embedded and saved chunks to DB.
+2024-11-20 10:03:55,679 - INFO - Querying the vector DB to get context ...
+2024-11-20 10:03:56,092 - INFO - Running full-text search ...
+2024-11-20 10:03:56,118 - INFO - ✅ Got 15 matched chunks.
+2024-11-20 10:03:56,118 - INFO - Running inference with context ...
+2024-11-20 10:04:00,968 - INFO - ✅ Finished inference API call.
+2024-11-20 10:04:00,969 - INFO - Generating output ...
 # Answer
 
-Agentic RAG (Retrieval-Augmented Generation) is needed alongside ChatGPT for several reasons:
+Agentic RAG (Retrieval-Augmented Generation) is necessary even with the existence of ChatGPT due to its multi-faceted capabilities that enhance the overall processing and retrieval of information. Specifically, Agentic RAG employs multiple agents that can manage retrieval tasks, document comparisons, and even perform specific operations like calculations, which are not inherently available in a single model like ChatGPT. This allows for a more streamlined and efficient process when addressing complex queries that require synthesis from various data points, ensuring that no critical context is lost during retrieval and generation processes[1][4]. Additionally, RAG's framework allows for greater flexibility and precision in handling varied types of queries, especially those that require comparative analysis or handling large volumes of data that exceed typical model limitations[2][5][6]. Furthermore, it enables the use of specialized agents that can focus on unique tasks, making the whole system more dynamic and capable of tackling intricate demands in real-time applications[4][6].
 
-1. **Precision and Contextual Relevance**: While ChatGPT offers generative responses, it may not
-reliably provide precise answers, especially when specific, accurate information is critical[5].
-Agentic RAG enhances this by integrating retrieval mechanisms that improve response context and
-accuracy, allowing users to access the most relevant and recent data without the need for costly
-model fine-tuning[2].
+In short, while ChatGPT offers robust conversational capabilities, the agentic approach of RAG significantly broadens the scope and effectiveness of information processing for complex tasks.
 
-2. **Customizability**: RAG allows businesses to create tailored chatbots that can securely
-reference company-specific data[2]. In contrast, ChatGPT’s broader capabilities may not be
-directly suited for specialized, domain-specific questions without comprehensive customization[3].
-
-3. **Complex Query Handling**: RAG can be optimized for complex queries and can be adjusted to
-work better with specific types of inputs, such as comparing and contrasting information, a task
-where ChatGPT may struggle under certain circumstances[9]. This level of customization can lead to
-better performance in niche applications where precise retrieval of information is crucial.
-
-4. **Asynchronous Processing Capabilities**: Future agentic systems aim to integrate asynchronous
-handling of actions, allowing for parallel processing and reducing wait times for retrieval and
-computation, which is a limitation in the current form of ChatGPT[7]. This advancement would enhance
-overall efficiency and responsiveness in conversations.
-
-5. **Incorporating Retrieved Information Effectively**: Using RAG can significantly improve how
-retrieved information is utilized within a conversation. By effectively managing the context and
-relevance of retrieved documents, RAG helps in framing prompts that can guide ChatGPT towards
-delivering more accurate responses[10].
-
-In summary, while ChatGPT excels in generating conversational responses, agentic RAG brings
-precision, customization, and efficiency that can significantly enhance the overall conversational
-AI experience.
 
 # References
 
 [1] https://community.openai.com/t/how-to-use-rag-properly-and-what-types-of-query-it-is-good-at/658204
-[2] https://www.linkedin.com/posts/brianjuliusdc_dax-powerbi-chatgpt-activity-7235953280177041408-wQqq
-[3] https://community.openai.com/t/how-to-use-rag-properly-and-what-types-of-query-it-is-good-at/658204
-[4] https://community.openai.com/t/prompt-engineering-for-rag/621495
-[5] https://www.ben-evans.com/benedictevans/2024/6/8/building-ai-products
-[6] https://community.openai.com/t/prompt-engineering-for-rag/621495
-[7] https://www.linkedin.com/posts/kurtcagle_agentic-rag-personalizing-and-optimizing-activity-7198097129993613312-z7Sm
-[8] https://community.openai.com/t/how-to-use-rag-properly-and-what-types-of-query-it-is-good-at/658204
-[9] https://community.openai.com/t/how-to-use-rag-properly-and-what-types-of-query-it-is-good-at/658204
-[10] https://community.openai.com/t/prompt-engineering-for-rag/621495
+[2] https://community.openai.com/t/how-to-use-rag-properly-and-what-types-of-query-it-is-good-at/658204
+[3] https://community.openai.com/t/prompt-engineering-for-rag/621495
+[4] https://community.openai.com/t/how-to-use-rag-properly-and-what-types-of-query-it-is-good-at/658204
+[5] https://news.ycombinator.com/item?id=40739982
+[6] https://www.linkedin.com/posts/elijahbutler_can-you-use-chat-gpt-as-a-data-analyst-activity-7227666801688461312-qk6v
+[7] https://community.openai.com/t/prompt-engineering-for-rag/621495
+[8] https://news.ycombinator.com/item?id=40739982
+[9] https://www.linkedin.com/posts/elijahbutler_can-you-use-chat-gpt-as-a-data-analyst-activity-7227666801688461312-qk6v
+[10] https://www.linkedin.com/posts/elijahbutler_can-you-use-chat-gpt-as-a-data-analyst-activity-7227666801688461312-qk6v
+[11] https://community.openai.com/t/prompt-engineering-for-rag/621495
+[12] https://news.ycombinator.com/item?id=40739982
+[13] https://news.ycombinator.com/item?id=40739982
+[14] https://news.ycombinator.com/item?id=40739982
+[15] https://news.ycombinator.com/item?id=40739982
 ```
