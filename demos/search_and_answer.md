@@ -1,4 +1,4 @@
-```
+```bash
 % python ask.py -q "Why do we need agentic RAG even if we have ChatGPT?"
 
 ✅ Found 10 links for query: Why do we need agentic RAG even if we have ChatGPT?

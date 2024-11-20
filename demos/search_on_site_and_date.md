@@ -2,7 +2,7 @@ This following query will only use the information from openai.com that are upda
 day. The behavior is similar to the "site:openai.com" and "date-restrict" search parameters in Google
 search.
 
-```
+```bash
 % python ask.py -q "OpenAI Swarm Framework" -d 1 -s openai.com
 ✅ Found 10 links for query: OpenAI Swarm Framework
 ✅ Scraping the URLs ...

@@ -1,4 +1,4 @@
-```
+```bash
 % python ask.py -q "LLM Gen-AI Startups" -o extract --extract-schema-file instructions/extract_example.txt
 2024-10-29 08:15:24,320 - INFO - Searching the web ...
 2024-10-29 08:15:24,684 - INFO - ✅ Found 10 links for query: LLM Gen-AI Startups
