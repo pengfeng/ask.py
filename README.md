@@ -5,7 +5,7 @@
 ## 🚀 **Important Update!** 🚀
 
 A full version with db support and configurable components is open sourced here:
-[LeetTools](https://github.com/leettools-dev/leettools). Use the web as your knowledge base as you like!
+[LeetTools](https://github.com/leettools-dev/leettools). A demo web site has been setup [here](https://svc.leettools.com). Please check them out!
 
 ## Introduction
 
