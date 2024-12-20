@@ -2,6 +2,13 @@
 
 [![License](https://img.shields.io/github/license/pengfeng/ask.py)](LICENSE)
 
+## 🚀 **Important Update!** 🚀
+
+A full version with db support and configurable components is open sourced here:
+[LeetTools](https://github.com/leettools-dev/leettools). A demo web site has been setup [here](https://svc.leettools.com). Please check them out!
+
+## Introduction
+
 A single Python program to implement the search-extract-summarize flow, similar to AI search
 engines such as Perplexity.
 
@@ -32,6 +39,7 @@ We have a running UI example [in HuggingFace Spaces](https://huggingface.co/spac
 
 > [UPDATE]
 >
+> - 2024-12-20: add the full function version link
 > - 2024-11-20: add Docling converter and local mode to query against local files
 > - 2024-11-10: add Chonkie as the default chunker
 > - 2024-10-28: add extract function as a new output mode
@@ -128,13 +136,17 @@ Options:
   --help                          Show this message and exit.
 ```
 
-## Libraries and APIs used
+## License and Acknowledgment
+
+The source code is licensed under MIT license. Thanks for these amazing open-source projects and API
+providers:
 
 - [Google Search API](https://developers.google.com/custom-search/v1/overview)
 - [OpenAI API](https://beta.openai.com/docs/api-reference/completions/create)
 - [Jinja2](https://jinja.palletsprojects.com/en/3.0.x/)
 - [bs4](https://www.crummy.com/software/BeautifulSoup/bs4/doc/)
 - [DuckDB](https://github.com/duckdb/duckdb)
+- [Docling](https://github.com/DS4SD/docling)
 - [GradIO](https://github.com/gradio-app/gradio)
 - [Chonkie](https://github.com/bhavnicksm/chonkie)
 
