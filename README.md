@@ -2,6 +2,8 @@
 
 [![License](https://img.shields.io/github/license/pengfeng/ask.py)](LICENSE)
 
+[Update] A full version with db support is open sourced here: [LeetTools](https://github.com/leettools-dev/leettools). Use the web as your knowledge base as you like!
+
 A single Python program to implement the search-extract-summarize flow, similar to AI search
 engines such as Perplexity.
 
@@ -32,6 +34,7 @@ We have a running UI example [in HuggingFace Spaces](https://huggingface.co/spac
 
 > [UPDATE]
 >
+> - 2024-12-20: add the full function version link
 > - 2024-11-20: add Docling converter and local mode to query against local files
 > - 2024-11-10: add Chonkie as the default chunker
 > - 2024-10-28: add extract function as a new output mode
@@ -135,6 +138,7 @@ Options:
 - [Jinja2](https://jinja.palletsprojects.com/en/3.0.x/)
 - [bs4](https://www.crummy.com/software/BeautifulSoup/bs4/doc/)
 - [DuckDB](https://github.com/duckdb/duckdb)
+- [Docling](https://github.com/DS4SD/docling)
 - [GradIO](https://github.com/gradio-app/gradio)
 - [Chonkie](https://github.com/bhavnicksm/chonkie)
 
