@@ -2,7 +2,11 @@
 
 [![License](https://img.shields.io/github/license/pengfeng/ask.py)](LICENSE)
 
-[Update] A full version with db support is open sourced here: [LeetTools](https://github.com/leettools-dev/leettools). Use the web as your knowledge base as you like!
+## 🚀 **Important Update!** 🚀
+
+A full version with db support is open sourced here: [LeetTools](https://github.com/leettools-dev/leettools). Use the web as your knowledge base as you like!
+
+## Introduction
 
 A single Python program to implement the search-extract-summarize flow, similar to AI search
 engines such as Perplexity.
