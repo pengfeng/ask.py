@@ -136,7 +136,10 @@ Options:
   --help                          Show this message and exit.
 ```
 
-## Libraries and APIs used
+## License and Acknowledgment
+
+The source code is licensed under MIT license. Thanks for these amazing open-source projects and API
+providers:
 
 - [Google Search API](https://developers.google.com/custom-search/v1/overview)
 - [OpenAI API](https://beta.openai.com/docs/api-reference/completions/create)
