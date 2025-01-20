@@ -12,6 +12,7 @@ A full version with db support and configurable components is open sourced here:
 A single Python program to implement the search-extract-summarize flow, similar to AI search
 engines such as Perplexity.
 
+- You can run it with local Ollama inference and embedding models.
 - You can run it on command line or with a GradIO UI.
 - You can control the output behavior, e.g., extract structured data or change output language,
 - You can control the search behavior, e.g., restrict to a specific site or date, or just scrape
@@ -29,6 +30,7 @@ We have a running UI example [in HuggingFace Spaces](https://huggingface.co/spac
 - [Only use the latest information from a specific site](demos/search_on_site_and_date.md)
 - [Extract information from web search results](demos/search_and_extract.md)
 - [Ask questions against local files](demos/local_files.md)
+- [Use Ollama local LLM and Embedding models](demos/run_with_ollama.md)
 
 > [!NOTE]
 >
@@ -38,7 +40,8 @@ We have a running UI example [in HuggingFace Spaces](https://huggingface.co/spac
 >   pipeline, and real query engine soon. Star and watch this repo for updates!
 
 > [UPDATE]
->
+> - 2025-01-20: add support for .env file switch and Ollama example
+> - 2025-01-20: add support for default search proxy
 > - 2024-12-20: add the full function version link
 > - 2024-11-20: add Docling converter and local mode to query against local files
 > - 2024-11-10: add Chonkie as the default chunker
@@ -87,12 +90,13 @@ the pipeline.
 
 # modify .env file to set the API keys or export them as environment variables as below
 
-# right now we use Google search API
-% export SEARCH_API_KEY="your-google-search-api-key"
-% export SEARCH_PROJECT_KEY="your-google-cx-key"
+# you can use the Google search API, if not set we provide a default search engine proxy for testing
+# % export SEARCH_API_KEY="your-google-search-api-key"
+# % export SEARCH_PROJECT_KEY="your-google-cx-key"
 
-# right now we use OpenAI API
-% export LLM_API_KEY="your-openai-api-key"
+# right now we use OpenAI API, default using OpenAI
+# % export LLM_BASE_URL=https://api.openai.com/v1
+% export LLM_API_KEY=<your-openai-api-key>
 
 # By default, the program will start a web UI. See GradIO Deployment section for more info.
 # Run the program on command line with -c option
@@ -131,9 +135,35 @@ Options:
                                   search only.
   -c, --run-cli                   Run as a command line tool instead of
                                   launching the Gradio UI
+  -e, --env TEXT                  The environment file to use, absolute path
+                                  or related to package root.
   -l, --log-level [DEBUG|INFO|WARNING|ERROR]
                                   Set the logging level  [default: INFO]
   --help                          Show this message and exit.
+```
+
+# Use Different LLM Endpoints
+
+We can run Ask.py with different env files to use different LLM endpoints and other
+related settings. For example, if you have a local Ollama serving instance, you can set
+to use it as follows:
+
+```bash
+# you may need to pull the models first
+% ollama pull llama3.2
+% ollama pull nomic-embed-text
+% ollama serve
+
+% cat > .env.ollama <<EOF
+LLM_BASE_URL=http://localhost:11434/v1
+LLM_API_KEY=dummy-key
+DEFAULT_INFERENCE_MODEL=llama3.2
+EMBEDDING_MODEL=nomic-embed-text
+EMBEDDING_DIMENSIONS=768
+EOF
+
+# Then run the command with the -e option to specify the .env file to use
+% python ask.py -e .env.ollama -c -q "How does Ask.py work?"
 ```
 
 ## License and Acknowledgment

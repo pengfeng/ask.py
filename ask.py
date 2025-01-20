@@ -10,7 +10,7 @@ from datetime import datetime
 from enum import Enum
 from functools import partial
 from queue import Queue
-from typing import Any, Dict, Generator, List, Optional, Tuple, TypeVar
+from typing import Any, Dict, Generator, List, Optional, Tuple, TypeVar, final
 
 import click
 import gradio as gr
@@ -111,12 +111,12 @@ def _output_csv(result_dict: Dict[str, List[BaseModel]], key_name: str) -> str:
 class Ask:
 
     def __init__(self, logger: Optional[logging.Logger] = None):
-        self.read_env_variables()
-
         if logger is not None:
             self.logger = logger
         else:
             self.logger = _get_logger("INFO")
+
+        self.read_env_variables()
 
         self.init_converter()
         self.init_chunker()
@@ -133,22 +133,43 @@ class Ask:
     def read_env_variables(self) -> None:
         err_msg = ""
 
-        self.search_api_key = os.environ.get("SEARCH_API_KEY")
-        if self.search_api_key is None:
-            err_msg += "SEARCH_API_KEY env variable not set.\n"
-        self.search_project_id = os.environ.get("SEARCH_PROJECT_KEY")
-        if self.search_project_id is None:
-            err_msg += "SEARCH_PROJECT_KEY env variable not set.\n"
+        self.search_api_url = os.environ.get("SEARCH_API_URL")
+        if self.search_api_url is None:
+            self.search_api_key = os.environ.get("SEARCH_API_KEY")
+            if self.search_api_key:
+                self.search_api_url = "https://www.googleapis.com/customsearch/v1"
+                self.search_project_id = os.environ.get("SEARCH_PROJECT_KEY")
+                if self.search_project_id is None:
+                    err_msg += "SEARCH_PROJECT_KEY env variable not set while SEARCH_API_KEY is set.\n"
+            else:
+                self.logger.info("No SEARCH_API_URL or SEARCH_API_KEYenv variable set.")
+                self.logger.info(
+                    "Using the default proxy at https://svc.leettools.com:8098"
+                )
+                self.search_api_url = "https://svc.leettools.com:8098/customsearch/v1"
+                self.search_api_key = "dummy-search-api-key"
+                self.search_project_id = "dummy-search-project-id"
+        else:
+            self.search_api_key = os.environ.get("SEARCH_API_KEY")
+            if self.search_api_key is None:
+                err_msg += (
+                    f"SEARCH_API_KEY env variable not set for {self.search_api_url}.\n"
+                )
+            self.search_project_id = os.environ.get("SEARCH_PROJECT_KEY")
+            if self.search_project_id is None:
+                err_msg += f"SEARCH_PROJECT_KEY env variable not set for {self.search_api_url}.\n"
+
         self.llm_api_key = os.environ.get("LLM_API_KEY")
         if self.llm_api_key is None:
             err_msg += "LLM_API_KEY env variable not set.\n"
 
-        if err_msg != "":
-            raise Exception(f"\n{err_msg}\n")
-
         self.llm_base_url = os.environ.get("LLM_BASE_URL")
         if self.llm_base_url is None:
             self.llm_base_url = "https://api.openai.com/v1"
+
+        self.default_inference_model = os.environ.get("DEFAULT_INFERENCE_MODEL")
+        if self.default_inference_model is None:
+            self.default_inference_model = "gpt-4o-mini"
 
         self.embedding_model = os.environ.get("EMBEDDING_MODEL")
         self.embedding_dimensions = os.environ.get("EMBEDDING_DIMENSIONS")
@@ -156,6 +177,9 @@ class Ask:
         if self.embedding_model is None or self.embedding_dimensions is None:
             self.embedding_model = "text-embedding-3-small"
             self.embedding_dimensions = 1536
+
+        if err_msg != "":
+            raise Exception(f"\n{err_msg}\n")
 
     def init_converter(self) -> None:
         from docling.document_converter import DocumentConverter
@@ -190,7 +214,7 @@ class Ask:
     def search_web(self, query: str, settings: AskSettings) -> List[str]:
         escaped_query = urllib.parse.quote(query)
         url_base = (
-            f"https://www.googleapis.com/customsearch/v1?key={self.search_api_key}"
+            f"{self.search_api_url}?key={self.search_api_key}"
             f"&cx={self.search_project_id}&q={escaped_query}"
         )
         url_paras = f"&safe=active"
@@ -543,14 +567,16 @@ Here is the context:
             },
         )
 
-        self.logger.debug(
-            f"Running inference with model: {settings.inference_model_name}"
-        )
+        final_inference_model = settings.inference_model_name
+        if settings.inference_model_name is None:
+            final_inference_model = self.default_inference_model
+
+        self.logger.debug(f"Running inference with model: {final_inference_model}")
         self.logger.debug(f"Final user prompt: {user_prompt}")
 
         api_client = self._get_api_client()
         completion = api_client.chat.completions.create(
-            model=settings.inference_model_name,
+            model=final_inference_model,
             messages=[
                 {
                     "role": "system",
@@ -1011,7 +1037,7 @@ def launch_gradio(
 @click.option(
     "--inference-model-name",
     required=False,
-    default="gpt-4o-mini",
+    default=None,
     help="Model name to use for inference",
 )
 @click.option(
@@ -1024,6 +1050,14 @@ def launch_gradio(
     "-c",
     is_flag=True,
     help="Run as a command line tool instead of launching the Gradio UI",
+)
+@click.option(
+    "-e",
+    "--env",
+    "env",
+    default=None,
+    required=False,
+    help="The environment file to use, absolute path or related to package root.",
 )
 @click.option(
     "-l",
@@ -1047,13 +1081,27 @@ def search_extract_summarize(
     inference_model_name: str,
     vector_search_only: bool,
     run_cli: bool,
+    env: str,
     log_level: str,
 ):
     load_dotenv(dotenv_path=default_env_file, override=False)
     logger = _get_logger(log_level)
 
-    if output_mode == "extract" and not extract_schema_file:
-        raise Exception("Extract mode requires the --extract-schema-file argument.")
+    if env:
+        load_dotenv(dotenv_path=env, override=True)
+
+    final_inference_model_name = inference_model_name
+    if final_inference_model_name is None:
+        final_inference_model_name = os.environ.get("DEFAULT_INFERENCE_MODEL")
+    if final_inference_model_name is None:
+        final_inference_model_name = "gpt-4o-mini"
+
+    if output_mode == "extract":
+        if not extract_schema_file:
+            raise Exception("Extract mode requires the --extract-schema-file argument.")
+
+        if not final_inference_model_name.lower().startswith("gpt"):
+            raise Exception("Extract mode requires the OpenAI GPT model.")
 
     settings = AskSettings(
         date_restrict=date_restrict,
@@ -1061,7 +1109,7 @@ def search_extract_summarize(
         output_language=output_language,
         output_length=output_length,
         url_list=_read_url_list(url_list_file),
-        inference_model_name=inference_model_name,
+        inference_model_name=final_inference_model_name,
         hybrid_search=(not vector_search_only),
         input_mode=InputMode(input_mode),
         output_mode=OutputMode(output_mode),
