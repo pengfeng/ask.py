@@ -10,7 +10,7 @@ from datetime import datetime
 from enum import Enum
 from functools import partial
 from queue import Queue
-from typing import Any, Dict, Generator, List, Optional, Tuple, TypeVar, final
+from typing import Any, Dict, Generator, List, Optional, Tuple, TypeVar
 
 import click
 import gradio as gr
