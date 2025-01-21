@@ -159,17 +159,30 @@ class Ask:
             if self.search_project_id is None:
                 err_msg += f"SEARCH_PROJECT_KEY env variable not set for {self.search_api_url}.\n"
 
-        self.llm_api_key = os.environ.get("LLM_API_KEY")
-        if self.llm_api_key is None:
-            err_msg += "LLM_API_KEY env variable not set.\n"
-
         self.llm_base_url = os.environ.get("LLM_BASE_URL")
         if self.llm_base_url is None:
             self.llm_base_url = "https://api.openai.com/v1"
 
+        self.llm_api_key = os.environ.get("LLM_API_KEY")
+        if self.llm_api_key is None:
+            err_msg += "LLM_API_KEY env variable not set.\n"
+
         self.default_inference_model = os.environ.get("DEFAULT_INFERENCE_MODEL")
         if self.default_inference_model is None:
             self.default_inference_model = "gpt-4o-mini"
+
+        self.embed_base_url = os.environ.get("EMBED_BASE_URL")
+        if self.embed_base_url is None:
+            self.embed_base_url = self.llm_base_url
+
+        self.embed_api_key = os.environ.get("EMBED_API_KEY")
+        if self.embed_api_key is None:
+            if self.embed_base_url == self.llm_base_url:
+                self.embed_api_key = self.llm_api_key
+            else:
+                err_msg += (
+                    f"EMBED_API_KEY env variable not set for {self.embed_base_url}.\n"
+                )
 
         self.embedding_model = os.environ.get("EMBEDDING_MODEL")
         self.embedding_dimensions = os.environ.get("EMBEDDING_DIMENSIONS")
@@ -358,7 +371,7 @@ CREATE TABLE {table_name} (
         """
         The key of chunking_results is the URL and the value is the list of chunks.
         """
-        client = self._get_api_client()
+        embed_client = self._get_embed_api_client()
         embed_batch_size = 50
         query_batch_size = 100
         insert_data = []
@@ -372,7 +385,7 @@ CREATE TABLE {table_name} (
                 batches.append((url, batch))
 
         self.logger.info(f"Embedding {len(batches)} batches of chunks ...")
-        partial_get_embedding = partial(self.batch_get_embedding, client)
+        partial_get_embedding = partial(self.batch_get_embedding, embed_client)
         with ThreadPoolExecutor(max_workers=10) as executor:
             all_embeddings = executor.map(partial_get_embedding, batches)
         self.logger.info(f"✅ Finished embedding.")
@@ -428,8 +441,8 @@ CREATE TABLE {table_name} (
         The return value is a list of {url: str, chunk: str} records.
         In a real world, we will define a class of Chunk to have more metadata such as offsets.
         """
-        client = self._get_api_client()
-        embeddings = self.get_embedding(client, [query])[0]
+        embed_client = self._get_embed_api_client()
+        embeddings = self.get_embedding(embed_client, [query])[0]
 
         query_result: duckdb.DuckDBPyRelation = self.db_con.sql(
             f"""
@@ -498,8 +511,11 @@ CREATE TABLE {table_name} (
 
         return matched_chunks_dict.values()
 
-    def _get_api_client(self) -> OpenAI:
+    def _get_inference_api_client(self) -> OpenAI:
         return OpenAI(api_key=self.llm_api_key, base_url=self.llm_base_url)
+
+    def _get_embed_api_client(self) -> OpenAI:
+        return OpenAI(api_key=self.embed_api_key, base_url=self.embed_base_url)
 
     def _render_template(self, template_str: str, variables: Dict[str, Any]) -> str:
         env = Environment(loader=BaseLoader(), autoescape=False)
@@ -574,7 +590,7 @@ Here is the context:
         self.logger.debug(f"Running inference with model: {final_inference_model}")
         self.logger.debug(f"Final user prompt: {user_prompt}")
 
-        api_client = self._get_api_client()
+        api_client = self._get_inference_api_client()
         completion = api_client.chat.completions.create(
             model=final_inference_model,
             messages=[
@@ -635,7 +651,7 @@ Below is the provided content:
             items=(List[target_class], ...),
         )
 
-        api_client = self._get_api_client()
+        api_client = self._get_inference_api_client()
         completion = api_client.beta.chat.completions.parse(
             model=settings.inference_model_name,
             messages=[
