@@ -3,7 +3,7 @@
 
 - [🚀 **Updates!** 🚀](#-updates-)
 - [Introduction](#introduction)
-  - [Demo Use Cases](#demo-use-cases)
+  - [Demo use cases](#demo-use-cases)
   - [The search-extract-summarize flow](#the-search-extract-summarize-flow)
 - [Quick start](#quick-start)
 - [Use Different LLM Endpoints](#use-different-llm-endpoints)
@@ -54,7 +54,7 @@ We have a running UI example [in HuggingFace Spaces](https://huggingface.co/spac
 
 ![image](https://github.com/user-attachments/assets/0483e6a2-75d7-4fbd-813f-bfa13839c836)
 
-## Demo Use Cases
+## Demo use cases
 
 - [Search like Perplexity](demos/search_and_answer.md)
 - [Only use the latest information from a specific site](demos/search_on_site_and_date.md)
