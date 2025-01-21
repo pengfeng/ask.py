@@ -1,13 +1,43 @@
-# ask.py
 
 [![License](https://img.shields.io/github/license/pengfeng/ask.py)](LICENSE)
 
-## 🚀 **Important Update!** 🚀
+- [🚀 **Updates!** 🚀](#-updates-)
+- [Introduction](#introduction)
+  - [Demo use cases](#demo-use-cases)
+  - [The search-extract-summarize flow](#the-search-extract-summarize-flow)
+- [Quick start](#quick-start)
+- [Use Different LLM Endpoints](#use-different-llm-endpoints)
+  - [Use local Ollama inference and embedding models](#use-local-ollama-inference-and-embedding-models)
+  - [Use DeepSeek API inference with OpenAI embedding models](#use-deepseek-api-inference-with-openai-embedding-models)
+- [GradIO Deployment](#gradio-deployment)
+- [Community](#community)
+
+
+# 🚀 **Updates!** 🚀
 
 A full version with db support and configurable components is open sourced here:
-[LeetTools](https://github.com/leettools-dev/leettools). A demo web site has been setup [here](https://svc.leettools.com). Please check them out!
+[LeetTools](https://github.com/leettools-dev/leettools). A demo web site has been setup 
+[here](https://svc.leettools.com). Please check them out!
 
-## Introduction
+We also added support for local Ollama inference and embedding models, as well as for other API
+providers such as DeepSeek. Please see the [`Use Different LLM Endpoints`](#use-different-llm-endpoints) secton for more details.
+
+> [UPDATE]
+> - 2025-01-20: add support for separate API endpoints for inference and embedding
+> - 2025-01-20: add support for .env file switch and Ollama example
+> - 2025-01-20: add support for default search proxy
+> - 2024-12-20: add the full function version link
+> - 2024-11-20: add Docling converter and local mode to query against local files
+> - 2024-11-10: add Chonkie as the default chunker
+> - 2024-10-28: add extract function as a new output mode
+> - 2024-10-25: add hybrid search demo using DuckDB full-text search
+> - 2024-10-22: add GradIO integation
+> - 2024-10-21: use DuckDB for the vector search and use API for embedding
+> - 2024-10-20: allow to specify a list of input urls
+> - 2024-10-18: output-language and output-length parameters for LLM
+> - 2024-10-18: date-restrict and target-site parameters for seach
+
+# Introduction
 
 A single Python program to implement the search-extract-summarize flow, similar to AI search
 engines such as Perplexity.
@@ -24,7 +54,7 @@ We have a running UI example [in HuggingFace Spaces](https://huggingface.co/spac
 
 ![image](https://github.com/user-attachments/assets/0483e6a2-75d7-4fbd-813f-bfa13839c836)
 
-## Demo Use Cases
+## Demo use cases
 
 - [Search like Perplexity](demos/search_and_answer.md)
 - [Only use the latest information from a specific site](demos/search_on_site_and_date.md)
@@ -38,20 +68,6 @@ We have a running UI example [in HuggingFace Spaces](https://huggingface.co/spac
 >   Performance or scalability is not in the scope of this program.
 > - We are planning to open source a real search-enabled AI toolset with real DB setup, real document
 >   pipeline, and real query engine soon. Star and watch this repo for updates!
-
-> [UPDATE]
-> - 2025-01-20: add support for .env file switch and Ollama example
-> - 2025-01-20: add support for default search proxy
-> - 2024-12-20: add the full function version link
-> - 2024-11-20: add Docling converter and local mode to query against local files
-> - 2024-11-10: add Chonkie as the default chunker
-> - 2024-10-28: add extract function as a new output mode
-> - 2024-10-25: add hybrid search demo using DuckDB full-text search
-> - 2024-10-22: add GradIO integation
-> - 2024-10-21: use DuckDB for the vector search and use API for embedding
-> - 2024-10-20: allow to specify a list of input urls
-> - 2024-10-18: output-language and output-length parameters for LLM
-> - 2024-10-18: date-restrict and target-site parameters for seach
 
 ## The search-extract-summarize flow
 
@@ -82,7 +98,7 @@ For example, we can:
 This program can serve as a playground to understand and experiment with different components in
 the pipeline.
 
-## Quick start
+# Quick start
 
 ```bash
 # recommend to use Python 3.10 or later and use venv or conda to create a virtual environment
@@ -144,6 +160,7 @@ Options:
 
 # Use Different LLM Endpoints
 
+## Use local Ollama inference and embedding models
 We can run Ask.py with different env files to use different LLM endpoints and other
 related settings. For example, if you have a local Ollama serving instance, you can set
 to use it as follows:
@@ -163,29 +180,37 @@ EMBEDDING_DIMENSIONS=768
 EOF
 
 # Then run the command with the -e option to specify the .env file to use
-% python ask.py -e .env.ollama -c -q "How does Ask.py work?"
+% python ask.py -e .env.ollama -c -q "How does Ollama work?"
 ```
 
-## License and Acknowledgment
+## Use DeepSeek API inference with OpenAI embedding models
 
-The source code is licensed under MIT license. Thanks for these amazing open-source projects and API
-providers:
+We can also use one provider for inference and another for embedding. For example, we can use
+DeepSeek API for inference and OpenAI for embedding since DeepSeek does not provide an embedding
+endpoint as of Jan 2025:
 
-- [Google Search API](https://developers.google.com/custom-search/v1/overview)
-- [OpenAI API](https://beta.openai.com/docs/api-reference/completions/create)
-- [Jinja2](https://jinja.palletsprojects.com/en/3.0.x/)
-- [bs4](https://www.crummy.com/software/BeautifulSoup/bs4/doc/)
-- [DuckDB](https://github.com/duckdb/duckdb)
-- [Docling](https://github.com/DS4SD/docling)
-- [GradIO](https://github.com/gradio-app/gradio)
-- [Chonkie](https://github.com/bhavnicksm/chonkie)
+```bash
+% cat > .env.deepseek <<EOF
+LLM_BASE_URL=https://api.deepseek.com/v1
+LLM_API_KEY=<deepseek-api-key>
+DEFAULT_INFERENCE_MODEL=deepseek-chat
 
-## GradIO Deployment
+EMBED_BASE_URL=https://api.openai.com/v1
+EMBED_API_KEY=<openai-api-key>
+EMBEDDING_MODEL=text-embedding-3-small
+EMBEDDING_DIMENSIONS=1536
+EOF
+
+% python ask.py -e .env.deepseek -c -q "How does DeepSeek work?"
+```
+
+
+# GradIO Deployment
 
 > [!NOTE]
 > Original GradIO app-sharing document [here](https://www.gradio.app/guides/sharing-your-app).
 
-### Quick test and sharing
+**Quick test and sharing**
 
 By default, the program will start a web UI and share through GradIO.
 
@@ -200,7 +225,7 @@ By default, the program will start a web UI and share through GradIO.
 * Running on local URL:  http://127.0.0.1:7860
 ```
 
-### To share a more permanent link using HuggingFace Spaces
+**To share a more permanent link using HuggingFace Spaces**
 
 - First, you need to [create a free HuggingFace account](https://huggingface.co/welcome).
 - Then in your [settings/token page](https://huggingface.co/settings/tokens), create a new token with Write permissions.
@@ -227,3 +252,21 @@ Space available at https://huggingface.co/spaces/your_user_name/ask.py
 ```
 
 Now you can use the HuggingFace space app to run your queries.
+
+
+# Community
+
+**License and Acknowledgment**
+
+The source code is licensed under MIT license. Thanks for these amazing open-source projects and API
+providers:
+
+- [Google Search API](https://developers.google.com/custom-search/v1/overview)
+- [OpenAI API](https://beta.openai.com/docs/api-reference/completions/create)
+- [Jinja2](https://jinja.palletsprojects.com/en/3.0.x/)
+- [bs4](https://www.crummy.com/software/BeautifulSoup/bs4/doc/)
+- [DuckDB](https://github.com/duckdb/duckdb)
+- [Docling](https://github.com/DS4SD/docling)
+- [GradIO](https://github.com/gradio-app/gradio)
+- [Chonkie](https://github.com/bhavnicksm/chonkie)
+
