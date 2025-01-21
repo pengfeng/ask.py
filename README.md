@@ -23,6 +23,7 @@ We also added support for local Ollama inference and embedding models, as well a
 providers such as DeepSeek. Please see the [`Use Different LLM Endpoints`](#use-different-llm-endpoints) secton for more details.
 
 > [UPDATE]
+> - 2025-01-20: add support for separate API endpoints for inference and embedding
 > - 2025-01-20: add support for .env file switch and Ollama example
 > - 2025-01-20: add support for default search proxy
 > - 2024-12-20: add the full function version link
