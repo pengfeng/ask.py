@@ -1,3 +1,9 @@
+---
+title: ask.py
+app_file: ask.py
+sdk: gradio
+sdk_version: 5.3.0
+---
 
 [![License](https://img.shields.io/github/license/pengfeng/ask.py)](LICENSE)
 
