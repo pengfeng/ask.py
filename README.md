@@ -22,8 +22,7 @@ sdk_version: 5.3.0
 # 🚀 **Updates!** 🚀
 
 A full version with db support and configurable components is open sourced here:
-[LeetTools](https://github.com/leettools-dev/leettools). A demo web site has been setup 
-[here](https://svc.leettools.com). Please check them out!
+[LeetTools](https://github.com/leettools-dev/leettools). Please check it out!
 
 We also added support for local Ollama inference and embedding models, as well as for other API
 providers such as DeepSeek. Please see the [`Use Different LLM Endpoints`](#use-different-llm-endpoints) secton for more details.
@@ -56,7 +55,7 @@ engines such as Perplexity.
 - You can run it in a cron job or bash script to automate complex search/data extraction tasks.
 - You can ask questions against local files.
 
-We have a running UI example [in HuggingFace Spaces](https://huggingface.co/spaces/leettools/AskPy).
+We have a running UI example [in HuggingFace Spaces](https://huggingface.co/spaces/LeetTools/ask.py).
 
 ![image](https://github.com/user-attachments/assets/0483e6a2-75d7-4fbd-813f-bfa13839c836)
 
