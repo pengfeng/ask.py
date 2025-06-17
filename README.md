@@ -106,8 +106,17 @@ the pipeline.
 # Quick start
 
 ```bash
-# recommend to use Python 3.10 or later and use venv or conda to create a virtual environment
-% pip install -r requirements.txt
+# We recommend using uv as the virtual environment manager
+# First install uv if you haven't:
+% curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Create a new virtual environment and install dependencies
+% uv venv
+% source .venv/bin/activate  # On Windows use: .venv\Scripts\activate
+% uv pip install -e .
+
+# Alternatively, if you prefer not to install in editable mode, you can use:
+% uv pip install .
 
 # modify .env file to set the API keys or export them as environment variables as below
 
