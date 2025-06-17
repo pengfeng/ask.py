@@ -135,29 +135,13 @@ class Ask:
 
         self.search_api_url = os.environ.get("SEARCH_API_URL")
         if self.search_api_url is None:
-            self.search_api_key = os.environ.get("SEARCH_API_KEY")
-            if self.search_api_key:
-                self.search_api_url = "https://www.googleapis.com/customsearch/v1"
-                self.search_project_id = os.environ.get("SEARCH_PROJECT_KEY")
-                if self.search_project_id is None:
-                    err_msg += "SEARCH_PROJECT_KEY env variable not set while SEARCH_API_KEY is set.\n"
-            else:
-                self.logger.info("No SEARCH_API_URL or SEARCH_API_KEYenv variable set.")
-                self.logger.info(
-                    "Using the default proxy at https://svc.leettools.com:8098"
-                )
-                self.search_api_url = "https://svc.leettools.com:8098/customsearch/v1"
-                self.search_api_key = "dummy-search-api-key"
-                self.search_project_id = "dummy-search-project-id"
-        else:
-            self.search_api_key = os.environ.get("SEARCH_API_KEY")
-            if self.search_api_key is None:
-                err_msg += (
-                    f"SEARCH_API_KEY env variable not set for {self.search_api_url}.\n"
-                )
-            self.search_project_id = os.environ.get("SEARCH_PROJECT_KEY")
-            if self.search_project_id is None:
-                err_msg += f"SEARCH_PROJECT_KEY env variable not set for {self.search_api_url}.\n"
+            self.search_api_url = "https://www.googleapis.com/customsearch/v1"
+        self.search_api_key = os.environ.get("SEARCH_API_KEY")
+        self.search_project_id = os.environ.get("SEARCH_PROJECT_KEY")
+        if self.search_api_key is None:
+            err_msg += "SEARCH_API_KEY env variable is not set.\n"
+        if self.search_project_id is None:
+            err_msg += "SEARCH_PROJECT_KEY env variable is not set.\n"
 
         self.llm_base_url = os.environ.get("LLM_BASE_URL")
         if self.llm_base_url is None:
