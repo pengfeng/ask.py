@@ -88,8 +88,7 @@ Given a query, the program will
 - use the top chunks as the context to ask an LLM to generate the answer
 - output the answer with the references
 
-Of course this flow is a very simplified version of the real AI search engines, but it is a good
-starting point to understand the basic concepts.
+Of course this flow is a very simplified version of the real AI search engines, but it is a good starting point to understand the basic concepts.
 
 One benefit is that we can manipulate the search function and output format.
 
@@ -112,9 +111,9 @@ the pipeline.
 
 # modify .env file to set the API keys or export them as environment variables as below
 
-# you can use the Google search API, if not set we provide a default search engine proxy for testing
-# % export SEARCH_API_KEY="your-google-search-api-key"
-# % export SEARCH_PROJECT_KEY="your-google-cx-key"
+# you need to set the Google search API
+% export SEARCH_API_KEY="your-google-search-api-key"
+% export SEARCH_PROJECT_KEY="your-google-cx-key"
 
 # right now we use OpenAI API, default using OpenAI
 # % export LLM_BASE_URL=https://api.openai.com/v1
